@@ -1,0 +1,32 @@
+# read more on https://www.codingforentrepreneurs.com/shorts/how-i-use-redis-for-new-projects-with-docker-compose/
+# version: '3.9'
+# services:
+#     redis:
+#         image: redis
+#         restart: always
+#         ports:
+#             - 6170:6379
+#         volumes:
+#             - data:/data
+#         entrypoint: redis-server --appendonly yes
+# volumes:
+#     data:
+services:
+  redis:
+    image: redis
+    restart: always
+    ports:
+      - 6170:6379
+    volumes:
+      - data:/data
+    entrypoint: redis-server --appendonly yes
+
+  celery:
+    build: .  # ← This builds your Dockerfile
+    depends_on:
+      - redis
+    environment:
+      - CELERY_REDIS_BROKER_URL=redis://redis:6379
+
+volumes:
+  data:

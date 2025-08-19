@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scholarship Application Reminder</title>
+    <style>
+        /* Reset styles for email clients */
+        body, table, td, p, a, li, blockquote {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        table, td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+        img {
+            -ms-interpolation-mode: bicubic;
+            border: 0;
+            height: auto;
+            line-height: 100%;
+            outline: none;
+            text-decoration: none;
+        }
+        
+        /* Main styles */
+        body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background-color: #0f172a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #1e293b;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            padding: 30px 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        
+        .header p {
+            color: #bfdbfe;
+            margin: 10px 0 0 0;
+            font-size: 16px;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 18px;
+            color: #e2e8f0;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        .scholarship-card {
+            background-color: #334155;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 25px 0;
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+        
+        .scholarship-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            border-radius: 2px;
+        }
+        
+        .scholarship-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin: 0 0 15px 0;
+        }
+        
+        .scholarship-details {
+            margin: 15px 0;
+        }
+        
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #475569;
+        }
+        
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #94a3b8;
+            flex: 1;
+        }
+        
+        .detail-value {
+            color: #e2e8f0;
+            flex: 2;
+            text-align: right;
+        }
+        
+        .status-pending {
+            background-color: #451a03;
+            color: #fbbf24;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            border: 1px solid #78350f;
+        }
+        
+        .deadline-warning {
+            background-color: #450a0a;
+            border: 1px solid #dc2626;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .deadline-warning .icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .deadline-warning p {
+            margin: 0;
+            font-weight: 600;
+            color: #fca5a5;
+        }
+        
+        .cta-section {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 15px 30px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+        }
+        
+        .tips-section {
+            background-color: #2d3748;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+        
+        .tips-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin: 0 0 15px 0;
+        }
+        
+        .tips-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .tips-list li {
+            padding: 8px 0;
+            color: #cbd5e1;
+            position: relative;
+            padding-left: 25px;
+        }
+        
+        .tips-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        .footer {
+            background-color: #0f172a;
+            color: #94a3b8;
+            text-align: center;
+            padding: 25px;
+            font-size: 14px;
+        }
+        
+        .footer a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        
+        .footer p {
+            margin: 5px 0;
+        }
+        
+        /* Responsive design */
+        @media only screen and (max-width: 600px) {
+            .email-container {
+                margin: 10px;
+                border-radius: 4px;
+            }
+            
+            .content {
+                padding: 25px 20px;
+            }
+            
+            .scholarship-card {
+                padding: 20px 15px;
+            }
+            
+            .detail-row {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .detail-value {
+                text-align: left;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📚 Scholarship Reminder</h1>
+            <p>Don't miss out on your opportunity!</p>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="content">
+            <div class="greeting">
+                <strong>Hello {{user_name}},</strong><br>
+                We hope this email finds you well! This is a friendly reminder about your pending scholarship applications.
+            </div>
+            
+            <!-- Scholarship Card -->
+            <div class="scholarship-card">
+                <h2 class="scholarship-title">{{scholarship_name}}</h2>
+                
+                <div class="scholarship-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Application Status:</span>
+                        <span class="detail-value">
+                            <span class="status-pending">Pending</span>
+                        </span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Application Deadline:</span>
+                        <span class="detail-value"><strong>{{deadline_date}}</strong></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Award Amount:</span>
+                        <span class="detail-value"><strong>{{award_amount}}</strong></span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Applied On:</span>
+                        <span class="detail-value">{{application_date}}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Deadline Warning (show if deadline is near) -->
+            <div class="deadline-warning">
+                <div class="icon">⏰</div>
+                <p>Only {{days_remaining}} days left until the deadline!</p>
+            </div>
+            
+            <!-- Call to Action -->
+            <div class="cta-section">
+                <a href="{{dashboard_url}}" class="cta-button">
+                    View Application Status
+                </a>
+            </div>
+            
+            <!-- Tips Section -->
+            <div class="tips-section">
+                <h3 class="tips-title">📝 Application Tips</h3>
+                <ul class="tips-list">
+                    <li>Double-check that all required documents are submitted</li>
+                    <li>Review your application for any spelling or grammar errors</li>
+                    <li>Ensure your personal statement reflects your goals and achievements</li>
+                    <li>Contact the scholarship provider if you have any questions</li>
+                    <li>Keep track of all communication regarding your application</li>
+                </ul>
+            </div>
+            
+            <p style="color: #cbd5e1; line-height: 1.6; margin-top: 30px;">
+                We're rooting for your success! If you have any questions or need assistance with your application, 
+                don't hesitate to reach out to our support team.
+            </p>
+            
+            <p style="color: #cbd5e1; margin-top: 20px;">
+                Best of luck,<br>
+                <strong>The Scholarship Team</strong>
+            </p>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>{{organization_name}}</strong></p>
+            <p>{{organization_address}}</p>
+            <p>
+                <a href="{{unsubscribe_url}}">Unsubscribe</a> | 
+                <a href="{{contact_url}}">Contact Us</a> | 
+                <a href="{{privacy_policy_url}}">Privacy Policy</a>
+            </p>
+            <p style="margin-top: 15px; font-size: 12px; color: #94a3b8;">
+                This email was sent to {{user_email}}. You received this because you have active scholarship applications.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

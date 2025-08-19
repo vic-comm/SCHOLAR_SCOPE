@@ -1,0 +1,238 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+  <!-- Hero Section -->
+  <div class="relative overflow-hidden">
+    <div class="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-purple-600/10"></div>
+    <div class="relative max-w-7xl mx-auto px-6 py-16">
+      <!-- Breadcrumb -->
+      <nav class="mb-8">
+        <div class="flex items-center space-x-2 text-sm">
+          <a href="{% url 'scholarship_list' %}" class="text-gray-400 hover:text-blue-400 transition-colors">
+            Scholarships
+          </a>
+          <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+          <span class="text-gray-300">{{ scholarship.title|truncatechars:50 }}</span>
+        </div>
+      </nav>
+
+      <div class="grid lg:grid-cols-3 gap-12">
+        <!-- Main Content -->
+        <div class="lg:col-span-2">
+          <!-- Header -->
+          <div class="mb-8">
+            <div class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-full border border-blue-500/30 mb-4">
+              <svg class="w-5 h-5 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
+              </svg>
+              <span class="text-blue-400 font-medium text-sm">Scholarship Program</span>
+            </div>
+            
+            <h1 class="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
+              {{ scholarship.title }}
+            </h1>
+            
+            <div class="prose prose-lg prose-gray max-w-none">
+              <p class="text-xl text-gray-300 leading-relaxed mb-8">
+                {{ scholarship.description }}
+              </p>
+            </div>
+
+            <!-- Key Stats -->
+            <div class="grid sm:grid-cols-2 gap-4 mb-8">
+              <div class="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-6">
+                <div class="flex items-center mb-2">
+                  <svg class="w-6 h-6 text-green-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
+                  </svg>
+                  <span class="text-green-400 font-semibold">Award Amount</span>
+                </div>
+                <p class="text-2xl font-bold text-white">{{ scholarship.reward }}</p>
+              </div>
+              
+              <div class="bg-gradient-to-r from-red-500/10 to-pink-500/10 border border-red-500/20 rounded-2xl p-6">
+                <div class="flex items-center mb-2">
+                  <svg class="w-6 h-6 text-red-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <span class="text-red-400 font-semibold">Deadline</span>
+                </div>
+                <p class="text-2xl font-bold text-white">{{ scholarship.end_date|date:"M j, Y" }}</p>
+                <p class="text-sm text-gray-400 mt-1">{{ scholarship.end_date|timeuntil }} remaining</p>
+              </div>
+            </div>
+
+            <!-- Categories -->
+            {% if scholarship.tags.all %}
+            <div class="mb-8">
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z"/>
+                </svg>
+                Categories
+              </h3>
+              <div class="flex flex-wrap gap-3">
+                {% for tag in scholarship.tags.all %}
+                  <span class="px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-300 text-sm font-medium rounded-full border border-blue-400/30 hover:border-blue-400/50 transition-colors">
+                    {{ tag.name }}
+                  </span>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="lg:col-span-1">
+          <div class="sticky top-8 space-y-6">
+            <!-- Quick Actions Card -->
+            <div class="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6">
+              <h3 class="text-xl font-semibold text-white mb-6 flex items-center">
+                <svg class="w-6 h-6 mr-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                Quick Actions
+              </h3>
+              
+              <div class="space-y-4">
+                {% if scholarship.link %}
+                <!-- Primary Apply Button -->
+                <a href="{% url "apply" scholarship.id %}" 
+                   class="block w-full px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5 text-center group">
+                  <div class="flex items-center justify-center">
+                    <span>Apply Now</span>
+                    <svg class="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                    </svg>
+                  </div>
+                </a>
+                {% endif %}
+
+                <!-- Save Scholarship -->
+                <form action="{% url "save_scholarship" scholarship.id%}" method="post">
+                  {% csrf_token %}
+                  <button type="submit" 
+                          class="w-full px-6 py-3 bg-gray-700/50 hover:bg-gray-700 text-white font-medium rounded-xl border border-gray-600/50 hover:border-gray-500 transition-all duration-300 flex items-center justify-center group">
+                    <svg class="w-5 h-5 mr-2 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                    </svg>
+                    Save to My List
+                  </button>
+                </form>
+
+                <!-- Secondary Actions -->
+                <div class="grid grid-cols-2 gap-3">
+                  <button class="px-4 py-3 bg-gray-700/30 hover:bg-gray-700/50 text-gray-300 hover:text-white rounded-xl border border-gray-600/30 hover:border-gray-500/50 transition-all duration-300 flex items-center justify-center group" 
+                          title="Share">
+                    <svg class="w-5 h-5 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"/>
+                    </svg>
+                  </button>
+                  
+                  <a href="{% url "bookmark" scholarship.id %}">
+                    <button class="w-full px-4 py-3 bg-gray-700/30 hover:bg-gray-700/50 text-gray-300 hover:text-white rounded-xl border border-gray-600/30 hover:border-gray-500/50 transition-all duration-300 flex items-center justify-center group" 
+                            title="Bookmark">
+                      <svg class="w-5 h-5 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                      </svg>
+                    </button>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Timeline Card -->
+            <div class="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-6">
+              <h3 class="text-xl font-semibold text-white mb-6 flex items-center">
+                <svg class="w-6 h-6 mr-3 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Important Dates
+              </h3>
+              
+              <div class="space-y-4">
+                <div class="flex items-start space-x-4">
+                  <div class="flex-shrink-0 w-3 h-3 bg-blue-500 rounded-full mt-2"></div>
+                  <div>
+                    <p class="text-white font-medium">Application Opens</p>
+                    <p class="text-gray-400 text-sm">Available now</p>
+                  </div>
+                </div>
+                
+                <div class="flex items-start space-x-4">
+                  <div class="flex-shrink-0 w-3 h-3 bg-red-500 rounded-full mt-2"></div>
+                  <div>
+                    <p class="text-white font-medium">Application Deadline</p>
+                    <p class="text-red-400 text-sm font-semibold">{{ scholarship.end_date|date:"F j, Y" }}</p>
+                  </div>
+                </div>
+                
+                <div class="flex items-start space-x-4">
+                  <div class="flex-shrink-0 w-3 h-3 bg-gray-500 rounded-full mt-2"></div>
+                  <div>
+                    <p class="text-white font-medium">Results Announced</p>
+                    <p class="text-gray-400 text-sm">TBA</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tips Card -->
+            <div class="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-6">
+              <h3 class="text-xl font-semibold text-white mb-4 flex items-center">
+                <svg class="w-6 h-6 mr-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+                Application Tips
+              </h3>
+              <ul class="space-y-3 text-sm text-gray-300">
+                <li class="flex items-start">
+                  <svg class="w-4 h-4 text-amber-400 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  Start your application early
+                </li>
+                <li class="flex items-start">
+                  <svg class="w-4 h-4 text-amber-400 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  Read requirements carefully
+                </li>
+                <li class="flex items-start">
+                  <svg class="w-4 h-4 text-amber-400 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  Prepare all documents in advance
+                </li>
+                <li class="flex items-start">
+                  <svg class="w-4 h-4 text-amber-400 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  Double-check before submitting
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Back Navigation -->
+  <div class="max-w-7xl mx-auto px-6 pb-16">
+    <div class="pt-8 border-t border-gray-700/50">
+      <a href="{% url 'scholarship_list' %}" 
+         class="inline-flex items-center px-6 py-3 bg-gray-800/50 hover:bg-gray-800 text-gray-300 hover:text-white rounded-xl border border-gray-700/50 hover:border-gray-600 transition-all duration-300 group">
+        <svg class="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+        Back to All Scholarships
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
