@@ -6,8 +6,10 @@ urlpatterns = [path('create/', views.CreateScholarship.as_view(), name='create_s
                 path('', views.ScholarshipList.as_view(), name='scholarship_list'),
                 path('detail/<int:pk>/', views.ScholarshipDetail.as_view(), name='scholarship_detail'),
                 path('bookmark/<int:sch_id>/', views.bookmark, name='bookmark'),
+                path('remove_bookmark/<int:sch_id>/', views.remove_bookmark, name='remove_bookmark'),
                 path('apply/<int:sch_id>/', views.apply, name='apply'),
                 path('update_status/<int:app_id>/', views.change_application_status, name='update_application'),
-                path('dashboard', views.user_dashboard, name='dashboard'),
-                path('save_scholarship', views.save_scholarship, name='save_scholarship'),
+                path('dashboard/', views.user_dashboard, name='dashboard'),
+                path('save_scholarship/<int:sch_id>/', views.save_scholarship, name='save_scholarship'),
+                path('update_profile/', views.update_profile, name='update_profile'),
                 ]

@@ -1,4 +1,18 @@
 # latest to be used
+import json
+from typing import List
+import asyncio
+from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, CrawlResult
+from crawl4ai import JsonCssExtractionStrategy, LLMExtractionStrategy
+from crawl4ai import LLMConfig
+from crawl4ai import BrowserConfig
+import re
+import json
+import time
+from typing import List, Dict
+from urllib.parse import urljoin, urlparse
+from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CrawlResult
+from scholarships.models import Scholarship
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -8,6 +22,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from datetime import datetime
 import re
+from rapidfuzz import fuzz
+from difflib import get_close_matches
 import time
 import json
 from datetime import datetime
@@ -25,9 +41,137 @@ import time
 import re
 from urllib.parse import urljoin, urlparse
 import os
+import re
+import time
+import random
+from datetime import datetime
+from urllib.parse import urlparse, urljoin
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+from bs4 import BeautifulSoup
 from datetime import datetime
 # Remove the decouple import since we're not using environment variables
 # from decouple import config
+def is_scholarship_link(href: str, text: str) -> bool:
+    """Determine if a link is likely a scholarship link"""
+    url_keywords = ["scholarship", "grant", "award", "fellowship", "bursary", "funding"]
+    text_keywords = url_keywords + ["opportunity"]
+
+    exclude_keywords = [
+        "contact", "about", "home", "login", "register", "privacy",
+        "terms", "cookie", "sitemap", "rss", "feed", "category",
+        "tag", "author", "archive", "search", "facebook", "twitter",
+        "instagram", "linkedin", "youtube", "whatsapp", "telegram"
+    ]
+
+    url_lower, text_lower = href.lower(), text.lower()
+
+    has_scholarship_keyword = (
+        any(k in url_lower for k in url_keywords) or
+        any(k in text_lower for k in text_keywords)
+    )
+    not_excluded = not any(k in url_lower or k in text_lower for k in exclude_keywords)
+
+
+    return has_scholarship_keyword and not_excluded
+
+def get_next_page_url(links: List[Dict], base_url: str) -> str | None:
+    """Find the next page link from extracted links"""
+    next_keywords = ["next", "older", "›", "»"]
+    for link in links:
+        text = link.get("text", "").strip().lower()
+        href = link.get("href")
+        if not href:
+            continue
+
+        if any(k in text for k in next_keywords):
+            return urljoin(base_url, href)
+
+    return None
+
+async def scholarship_list_scraper(list_url: str, max_scholarships: int = None) -> List[Dict]:
+    """
+    Crawl a scholarship listing page and extract scholarship links.
+    Handles pagination and basic filtering (like ScholarshipListScraper).
+    """
+    async with AsyncWebCrawler() as crawler:
+        config = CrawlerRunConfig()
+        all_scholarship_links = []
+        processed_urls = set()
+        page_num = 1
+        current_url = list_url
+
+        while True:
+            print(f"Scraping scholarship list page {page_num}: {current_url}")
+            results: List[CrawlResult] = await crawler.arun(current_url, config=config)
+            # print(results)
+
+            if not results:
+                print("No crawl results.")
+                break
+
+            result = results[0]
+            if not result.success:
+                print(f"Failed to scrape {current_url}")
+                break
+
+            # Extract internal + external links
+            links = result.links.get("internal", []) + result.links.get("external", [])
+            print(f"Found {len(links)} links on page {page_num}")
+            print(links)
+
+            page_links = []
+
+            for link in links:
+                href = link.get("href")
+                text = link.get("text", "").strip()
+                if not href:
+                    continue
+
+                full_url = urljoin(current_url, href)
+
+                if full_url in processed_urls:
+                    continue
+
+                if is_scholarship_link(href, text):
+                    scholarship_info = {
+                        "title": text,
+                        "url": full_url,
+                        "extracted_from": "crawl4ai"
+                    }
+                    page_links.append(scholarship_info)
+                    processed_urls.add(full_url)
+
+            if not page_links:
+                print("No scholarship links found on this page.")
+                break
+
+            all_scholarship_links.extend(page_links)
+            print(f"Extracted {len(page_links)} scholarships from page {page_num}")
+
+            # Check max limit
+            if max_scholarships and len(all_scholarship_links) >= max_scholarships:
+                all_scholarship_links = all_scholarship_links[:max_scholarships]
+                print(f"Reached maximum of {max_scholarships} scholarships.")
+                break
+
+            # Try to find next page
+            next_page_url = get_next_page_url(links, current_url)
+            if not next_page_url:
+                print("No more pages available.")
+                break
+
+            current_url = next_page_url
+            page_num += 1
+            time.sleep(2)  # polite crawling
+
+        print(f"Total scholarships found: {len(all_scholarship_links)}")
+        return all_scholarship_links
 
 class ScholarshipSeleniumScraper:
     def __init__(self, chrome_driver_path=None):
@@ -101,8 +245,8 @@ class ScholarshipSeleniumScraper:
                 'requirements': self.extract_requirements(),
                 'eligibility': self.extract_eligibility(),
                 'tags': self.extract_tags(),
-                # 'active': self.determine_if_active(),
-                'scraped_at': datetime.now().isoformat()
+                'level': self.extract_levels(),
+                'scraped_at':datetime.now().isoformat()
             }
             
             print('Data extraction completed!')
@@ -115,54 +259,83 @@ class ScholarshipSeleniumScraper:
             if self.driver:
                 self.driver.quit()
                 print('Browser connection closed.')
-     
+         
     def extract_application_link(self):
-        """Extract application link"""
+        """Extract application link from the page."""
         try:
-            # Look for application buttons/links
+            app_keywords = ["apply", "application", "submit", "register", "enroll"]
             app_selectors = [
                 "a[href*='apply']",
                 "a[href*='application']",
+                "a[href*='submit']",
                 "button[onclick*='apply']",
-                "a:contains('Apply')",
-                "a:contains('Submit')",
-                ".apply-btn",
-                ".application-link"
+                "button[onclick*='application']",
+                ".apply-btn", ".application-link", ".btn-apply", ".apply-now", ".cta-apply"
             ]
-            
+
+            # 1. Direct CSS selectors
             for selector in app_selectors:
                 try:
-                    if ':contains(' in selector:
-                        # Use XPath for text-based selection
-                        xpath = f"//a[contains(text(), '{selector.split(':contains(')[1].split(')')[0].strip("'")}')]"
-                        elements = self.driver.find_elements(By.XPATH, xpath)
-                    else:
-                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                     if elements:
                         element = elements[0]
-                        return {
-                            'text': element.text.strip(),
-                            'url': element.get_attribute('href') or element.get_attribute('onclick')
-                        }
+                        href = element.get_attribute("href") or element.get_attribute("onclick")
+                        if href:
+                            return {
+                                "text": element.text.strip() or "Apply",
+                                "url": self._normalize_url(href)
+                            }
                 except:
                     continue
-            
-            # Look for forms with application-related action
+
+            # 2. Text-based search (anchors & buttons)
+            xpath = " | ".join(
+                [
+                    f"//a[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{kw}')] | "
+                    f"//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{kw}')]"
+                    for kw in app_keywords
+                ]
+            )
+            elements = self.driver.find_elements(By.XPATH, xpath)
+            for element in elements:
+                href = element.get_attribute("href") or element.get_attribute("onclick")
+                text = element.text.strip() or "Apply"
+                if href:
+                    # Prefer external links
+                    if href.startswith("http"):
+                        return {"text": text, "url": self._normalize_url(href)}
+                    else:
+                        return {"text": text, "url": self._normalize_url(href)}
+
+            # 3. Forms with application-related actions
             forms = self.driver.find_elements(By.TAG_NAME, "form")
             for form in forms:
-                action = form.get_attribute('action')
-                if action and any(keyword in action.lower() for keyword in ['apply', 'application', 'submit']):
+                action = form.get_attribute("action")
+                if action and any(kw in action.lower() for kw in app_keywords):
                     return {
-                        'text': 'Application form',
-                        'url': action
+                        "text": "Application form",
+                        "url": self._normalize_url(action)
                     }
-            
+
         except Exception as e:
             print(f"Error extracting application link: {e}")
-        
-        return "Application link not found"
-    
+
+        # Fallback: use current page URL if nothing found
+        return {"text": "Application link not found", "url": self.driver.current_url}
+
+
+    def _normalize_url(self, link):
+        """Convert relative or JS onclick links into absolute URLs where possible"""
+        if not link:
+            return ""
+        # Handle onclick="window.location='...'"
+        if "window.location" in link or "location.href" in link:
+            import re
+            match = re.search(r"['\"](http.*?|/.*?|.*?\.php.*?)['\"]", link)
+            if match:
+                link = match.group(1)
+        return urljoin(self.driver.current_url, link)
+
     
     def extract_title(self):
         """Extract scholarship title"""
@@ -428,6 +601,49 @@ class ScholarshipSeleniumScraper:
             print(f"Error extracting requirements: {str(e)}")
             return ["Requirements not specified"]
     
+    def extract_levels(self):
+        """Extract education levels for which the scholarship is available"""
+        try:
+            page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
+            title_text = self.driver.title.lower()
+
+            # Combine all text for analysis
+            all_text = f"{page_text} {title_text}"
+
+            levels = set()
+
+            # Define sensible level keywords
+            level_keywords = {
+                "highschool": ["secondary school", "high school", "ssce", "waec", "neco", "alevel", "k12"],
+                "undergraduate": ["undergraduate", "bachelor", "bsc", "ba", "first degree", "college student"],
+                "postgraduate": ["postgraduate", "masters", "msc", "ma", "mphil", "graduate school"],
+                "phd": ["phd", "doctorate", "doctoral", "dphil", "research degree"],
+            }
+
+            # Match keywords in text
+            for level, keywords in level_keywords.items():
+                if any(keyword in all_text for keyword in keywords):
+                    levels.add(level)
+
+            # Check meta description/keywords if available
+            try:
+                meta_description = self.driver.find_element(By.CSS_SELECTOR, 'meta[name="description"]')
+                desc_content = meta_description.get_attribute("content").lower()
+                for level, keywords in level_keywords.items():
+                    if any(keyword in desc_content for keyword in keywords):
+                        levels.add(level)
+            except:
+                pass
+
+            # If no levels detected, default to "unspecified"
+            if not levels:
+                levels.add("unspecified")
+
+            return list(levels)
+
+        except Exception as e:
+            print(f"Error extracting levels: {str(e)}")
+            return ["unspecified"]
 
     def extract_eligibility(self):
         """Extract scholarship eligibility criteria"""
@@ -644,119 +860,7 @@ class ScholarshipSeleniumScraper:
             eligibility.append("Male students only")
         
         return eligibility
-        """Extract tags/categories for the scholarship"""
-        try:
-            page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
-            title_text = self.driver.title.lower()
-            
-            # Combine all text for analysis
-            all_text = f"{page_text} {title_text}"
-            
-            tags = set()
-            
-            # Educational level tags
-            level_keywords = {
-                'undergraduate': ['undergraduate', 'bachelor', 'bsc', 'ba', 'first degree'],
-                'postgraduate': ['postgraduate', 'masters', 'msc', 'ma', 'phd', 'doctorate'],
-                'high school': ['secondary', 'high school', 'ssce', 'waec', 'neco'],
-                'diploma': ['diploma', 'nd', 'hnd', 'certificate']
-            }
-            
-            # Field of study tags
-            field_keywords = {
-                'engineering': ['engineering', 'engineer', 'technology'],
-                'medicine': ['medicine', 'medical', 'health', 'nursing', 'pharmacy'],
-                'law': ['law', 'legal', 'jurisprudence'],
-                'business': ['business', 'management', 'mba', 'finance', 'accounting'],
-                'science': ['science', 'biology', 'chemistry', 'physics', 'mathematics'],
-                'arts': ['arts', 'literature', 'history', 'language'],
-                'agriculture': ['agriculture', 'farming', 'veterinary'],
-                'computer science': ['computer', 'software', 'programming', 'it', 'technology'],
-                'education': ['education', 'teaching', 'pedagogy']
-            }
-            
-            # Gender-based tags
-            gender_keywords = {
-                'female': ['women', 'female', 'girl', 'ladies'],
-                'male': ['men', 'male', 'boy', 'gentleman']
-            }
-            
-            # Location-based tags
-            location_keywords = {
-                'international': ['international', 'global', 'worldwide', 'abroad'],
-                'nigeria': ['nigeria', 'nigerian', 'local'],
-                'africa': ['africa', 'african'],
-                'usa': ['usa', 'america', 'united states'],
-                'uk': ['uk', 'britain', 'united kingdom'],
-                'canada': ['canada', 'canadian']
-            }
-            
-            # Special categories
-            special_keywords = {
-                'merit': ['merit', 'academic excellence', 'outstanding'],
-                'need-based': ['need', 'financial aid', 'low income'],
-                'minority': ['minority', 'disadvantaged', 'underrepresented'],
-                'research': ['research', 'thesis', 'dissertation'],
-                'leadership': ['leadership', 'community service', 'volunteer'],
-                'sports': ['sports', 'athletic', 'football', 'basketball']
-            }
-            
-            # Check all keyword categories
-            all_categories = [level_keywords, field_keywords, gender_keywords, 
-                            location_keywords, special_keywords]
-            
-            for category in all_categories:
-                for tag, keywords in category.items():
-                    if any(keyword in all_text for keyword in keywords):
-                        tags.add(tag)
-            
-            # Look for explicit tags in HTML
-            try:
-                # Check meta keywords
-                meta_keywords = self.driver.find_element(By.CSS_SELECTOR, 'meta[name="keywords"]')
-                keywords_content = meta_keywords.get_attribute('content')
-                if keywords_content:
-                    meta_tags = [tag.strip().lower() for tag in keywords_content.split(',')]
-                    tags.update(meta_tags[:5])  # Limit to 5 meta tags
-            except:
-                pass
-            
-            # Check for category/tag elements
-            try:
-                tag_selectors = [
-                    '.tags a', '.categories a', '.tag', '.category',
-                    '[class*="tag"]', '[class*="category"]'
-                ]
-                
-                for selector in tag_selectors:
-                    try:
-                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                        for element in elements[:5]:  # Limit to 5 elements
-                            tag_text = element.text.strip().lower()
-                            if tag_text and len(tag_text) < 50:
-                                tags.add(tag_text)
-                    except:
-                        continue
-            except:
-                pass
-            
-            # Convert to list and limit to reasonable number
-            final_tags = list(tags)[:10]  # Limit to 10 tags
-            
-            # Clean up tags
-            cleaned_tags = []
-            for tag in final_tags:
-                tag = re.sub(r'[^\w\s-]', '', tag)  # Remove special characters
-                tag = re.sub(r'\s+', ' ', tag).strip()  # Clean whitespace
-                if len(tag) > 1 and len(tag) < 30:  # Reasonable length
-                    cleaned_tags.append(tag)
-            
-            return cleaned_tags if cleaned_tags else ['general']
-            
-        except Exception as e:
-            print(f"Error extracting tags: {str(e)}")
-            return ['general']
-
+     
     def parse_date_string(self, date_str):
         """Parse date string to datetime object"""
         date_str = date_str.strip()
@@ -780,72 +884,68 @@ class ScholarshipSeleniumScraper:
                 continue
         
         return None
+    
+    def normalize(self, text: str):
+        """Lowercase, remove punctuation, normalize spaces."""
+        text = text.lower()
+        text = re.sub(r"[^a-z0-9\s]", " ", text)
+        return re.sub(r"\s+", " ", text).strip()
+
 
     def extract_tags(self):
-        """Extract tags/categories for the scholarship"""
+        """Extract only tags (not levels) for the scholarship."""
         try:
-            page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
-            title_text = self.driver.title.lower()
-            
-            # Combine all text for analysis
+            page_text = self.normalize(self.driver.find_element(By.TAG_NAME, "body").text)
+            title_text = self.normalize(self.driver.title)
             all_text = f"{page_text} {title_text}"
-            
+
             tags = set()
-            
-            # Only include sensible/relevant tags
-            sensible_keywords = {
-                'undergraduate': ['undergraduate', 'bachelor', 'bsc', 'ba', 'first degree'],
-                'postgraduate': ['postgraduate', 'masters', 'msc', 'ma', 'phd', 'doctorate'],
-                'highschool': ['secondary', 'high school', 'ssce', 'waec', 'neco'],
-                'international': ['international', 'global', 'worldwide', 'abroad'],
-                'merit': ['merit', 'academic excellence', 'outstanding'],
-                'need': ['need', 'financial aid', 'low income', 'need-based']
+
+            # Only keep actual tags here
+            tag_keywords = {
+                'international': ['international', 'global', 'worldwide', 'abroad', "foreign"],
+                'merit': ['merit', 'academic excellence', 'outstanding', 'scholarly'],
+                'need': ['need', 'financial aid', 'low income', 'need-based', 'scholarship for poor'],
             }
-            
-            # Check for sensible keywords only
-            for tag, keywords in sensible_keywords.items():
-                if any(keyword in all_text for keyword in keywords):
-                    tags.add(tag)
-            
-            # Look for explicit tags in HTML (but filter them)
+
+            # Step 1: keyword scan
+            for tag, keywords in tag_keywords.items():
+                for kw in keywords:
+                    if kw in all_text:
+                        tags.add(tag)
+                        break
+
+            # Step 2: meta keywords
             try:
-                # Check meta keywords
                 meta_keywords = self.driver.find_element(By.CSS_SELECTOR, 'meta[name="keywords"]')
-                keywords_content = meta_keywords.get_attribute('content')
+                keywords_content = self.normalize(meta_keywords.get_attribute('content') or "")
                 if keywords_content:
-                    meta_tags = [tag.strip().lower() for tag in keywords_content.split(',')]
-                    # Only add meta tags that match our sensible keywords
-                    for meta_tag in meta_tags[:5]:
-                        if meta_tag in sensible_keywords.keys():
-                            tags.add(meta_tag)
+                    meta_tags = [kw.strip() for kw in keywords_content.split(",")]
+                    for mt in meta_tags:
+                        for key in tag_keywords.keys():
+                            if get_close_matches(mt, [key], n=1, cutoff=0.8):
+                                tags.add(key)
             except:
                 pass
-            
-            # Check for category/tag elements (but filter them)
-            try:
-                tag_selectors = [
-                    '.tags a', '.categories a', '.tag', '.category',
-                    '[class*="tag"]', '[class*="category"]'
-                ]
-                
-                for selector in tag_selectors:
-                    try:
-                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                        for element in elements[:5]:  # Limit to 5 elements
-                            tag_text = element.text.strip().lower()
-                            # Only add if it matches our sensible keywords
-                            if tag_text in sensible_keywords.keys():
-                                tags.add(tag_text)
-                    except:
-                        continue
-            except:
-                pass
-            
-            # Convert to list and ensure we have the sensible tags only
-            final_tags = [tag for tag in tags if tag in sensible_keywords.keys()]
-            
-            return final_tags if final_tags else ['general']
-            
+
+            # Step 3: page tag/category elements
+            tag_selectors = [
+                '.tags a', '.categories a', '.tag', '.category',
+                '[class*="tag"]', '[class*="category"]'
+            ]
+            for selector in tag_selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for element in elements[:5]:
+                        tag_text = self.normalize(element.text)
+                        for key, keywords in tag_keywords.items():
+                            if tag_text in keywords or get_close_matches(tag_text, keywords, n=1, cutoff=0.8):
+                                tags.add(key)
+                except:
+                    continue
+
+            return list(tags) if tags else ['general']
+
         except Exception as e:
             print(f"Error extracting tags: {str(e)}")
             return ['general']
@@ -1148,9 +1248,35 @@ class ScholarshipListScraper:
                 continue
         
         return False
+import hashlib
     
+def generate_fingerprint(title, link):
+        base = f"{title.lower().strip()}-{link}"
+        return hashlib.sha256(base.encode()).hexdigest()
+
+import asyncio
+
+def run_async_task(coro):
+    """
+    Run an async coroutine safely inside Celery (or any existing event loop).
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If event loop already running, create a new temporary loop
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            result = new_loop.run_until_complete(coro)
+            new_loop.close()
+            return result
+        else:
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        # Fallback if no loop is available
+        return asyncio.run(coro)
 
 class ScholarshipBatchProcessor:
+   
     def __init__(self):
         """
         Initialize with your detailed scholarship scraper function
@@ -1158,9 +1284,19 @@ class ScholarshipBatchProcessor:
         """
         
         self.scraper = ScholarshipSeleniumScraper()
-        # self.detail_scraper = scraper.scrape_scholarship_data()
         self.list_scraper = ScholarshipListScraper()
+        self.consecutive_duplicates = 0
+        self.finger_prints = set(Scholarship.objects.values_list('fingerprint', flat=True))
         
+    def is_duplicate_titles(self, title, threshold=85):
+        recent_titles = Scholarship.objects.values_list('title', flat=True).order_by('-created_at')[:50]
+
+        for old_title in recent_titles:
+            score = fuzz.token_sort_ratio(title, old_title)
+            if score >= threshold:
+                return True
+        return False
+
     def process_scholarship_list(self, list_url, max_scholarships=None, delay_between_scrapes=3):
         """
         Complete pipeline: Get list of scholarships, then scrape each one for details
@@ -1197,7 +1333,17 @@ class ScholarshipBatchProcessor:
                     scholarship_name = detailed_data.get('title', scholarship['title'])
                     if not scholarship_name:
                         scholarship_name = f"Scholarship_{i}"
-                    
+                    title = detailed_data.get('title')
+                    link = detailed_data.get('link')
+                    fingerprint = generate_fingerprint(title, link)
+                    if fingerprint in self.finger_prints:
+                        self.consecutive_duplicates +=1 
+                        if self.consecutive_duplicates >= 3:
+                            break
+                        continue
+
+                    if self.is_duplicate_titles(title):
+                        continue
                     # Create nested structure for each scholarship
                     scholarship_entry = {
                         'name': scholarship_name,
@@ -1259,8 +1405,7 @@ class ScholarshipBatchProcessor:
                 }
             },
             'scholarships': {
-                scholarship['name']: scholarship 
-                for scholarship in scholarships
+                scholarship['name']: scholarship for scholarship in scholarships
             },
             'summary': {
                 'total_scholarships': len(scholarships),

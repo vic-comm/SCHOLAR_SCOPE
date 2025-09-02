@@ -3,28 +3,11 @@ from django.urls import reverse
 from django.contrib.auth.models import AbstractUser
 from taggit.managers import TaggableManager
 from django.utils import timezone
+from django.conf import settings
 from scholarships.utils import random_string_generator
 from django.utils.text import slugify
+import hashlib
 
-def unique_slug_generator(instance, new_slug=None):
-    """
-    This is for a Django project and it assumes your instance 
-    has a model with a slug field and a title character (char) field.
-    """
-    if new_slug is not None:
-        slug = new_slug
-    else:
-        slug = slugify(instance.title)
-
-    Klass = instance.__class__
-    qs_exists = Klass.objects.filter(slug=slug).exists()
-    if qs_exists:
-        new_slug = "{slug}-{randstr}".format(
-                    slug=slug,
-                    randstr=random_string_generator(size=4)
-                )
-        return unique_slug_generator(instance, new_slug=new_slug)
-    return slug
 # Create your models here.
 class User(AbstractUser):
     applied_scholarships = models.ManyToManyField(
@@ -35,41 +18,75 @@ class User(AbstractUser):
     is_admin = models.BooleanField(default=False)
     bookmarked_scholarships = models.ManyToManyField('Scholarship', through='Bookmark', related_name='bookmarked_by')
 
+class Tag(models.Model):
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        choices=[
+             ('international','International'),
+            ('merit', 'Merit'),
+            ('need', 'Need'),
+            ('general', 'General')
+        ]
+    )
 
+    def __str__(self):
+        return self.name
+    
+class Level(models.Model):
+    level = models.CharField(max_length=50, unique=True, 
+                            choices=(
+                            ("highschool", "High School"),
+                            ("undergraduate", "Undergraduate"),
+                            ("postgraduate", "Postgraduate"),
+                            ("phd", "PhD"),
+                            ("other", "Other"),
+                        ))
+    def __str__(self):
+        return self.level
+    
 class Scholarship(models.Model):
     title = models.CharField(max_length=255)
     start_date = models.DateTimeField(null=True, blank=True)
-    end_date = models.DateTimeField()
-    tags = TaggableManager()
+    end_date = models.DateTimeField(null=True, blank=True)
+    tags = models.ManyToManyField(Tag, related_name='scholarships', blank=True)
     description = models.TextField()
+    level = models.ManyToManyField(Level, related_name='scholarships', blank=True)
     reward = models.CharField(max_length=255)
     active = models.BooleanField(default=True)
     link = models.URLField()
-    slug = models.SlugField(null=True, blank=True)
     scrape_event = models.ForeignKey('ScholarshipScrapeEvent', on_delete=models.SET_NULL, null=True, blank=True, related_name='scholarships')
     eligibility = models.CharField(blank=True, null=True)
     requirements = models.CharField(blank=True, null=True)
     source = models.CharField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    fingerprint = models.CharField(max_length=250, null=True, blank=True)
+    slug = models.SlugField(null=True, blank=True)
+
+    def generate_unique_slug(self):
+        base_slug = slugify(self.title)
+        slug = base_slug
+        counter = 1
+        while self.__class__.objects.filter(slug=slug).exists():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+        return slug
+
+    def generate_fingerprint(self):
+        base = f"{self.title.lower().strip()}-{self.link}"
+        return hashlib.sha256(base.encode()).hexdigest()
+    
+    class Meta:
+        unique_together = ['title', 'link']
 
     def save(self, *args, **kwargs):
-        # Generate unique slug if it doesn't exist or if title changed
+        if not self.fingerprint:
+            self.fingerprint = self.generate_fingerprint()
         if not self.slug:
-            self.slug = unique_slug_generator(self)
-        elif self.pk:  # If updating existing instance
-            # Check if title has changed
-            try:
-                old_instance = self.__class__.objects.get(pk=self.pk)
-                if old_instance.title != self.title:
-                    # Title changed, generate new slug
-                    self.slug = unique_slug_generator(self)
-            except self.__class__.DoesNotExist:
-                # Instance doesn't exist yet, generate slug
-                self.slug = unique_slug_generator(self)
-        
-        # Call the parent save method
-        super().save(*args, **kwargs)
-
-
+            self.slug = self.generate_unique_slug()
+        return super().save(*args, **kwargs)
+    
+    
     def __str__(self):
         return self.title
     
@@ -94,7 +111,7 @@ class ScholarshipScrapeEventManager(models.Manager):
 class ScholarshipScrapeEvent(models.Model):
     STATUS_CHOICES = (('RUNNING','Running'),('COMPLETED','Completed'),('FAILED','Failed'), ('CANCELLED', 'Cancelled'))
     source_name = models.CharField(null=True, blank=True)
-    source_url= models.SlugField()
+    source_url= models.URLField()
     status = models.CharField(choices=STATUS_CHOICES, default='RUNNING')
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(blank=True, null=True)
@@ -114,14 +131,12 @@ class ScholarshipScrapeEvent(models.Model):
         return f"{self.source_name} - {self.started_at.strftime('%Y-%m-%d %H:%M')} - {self.status}"
     
     def mark_completed(self):
-        """Mark the scrape event as completed"""
         self.status = 'COMPLETED'
         self.completed_at = timezone.now()
         self.duration = self.completed_at - self.started_at
         self.save()
     
     def mark_failed(self, error_message):
-        """Mark the scrape event as failed"""
         self.status = 'FAILED'
         self.error_message = error_message
         self.completed_at = timezone.now()
@@ -129,7 +144,6 @@ class ScholarshipScrapeEvent(models.Model):
         self.save()
     
     def increment_error_count(self):
-        """Increment error count for this scrape"""
         self.error_count += 1
         self.save()
 
@@ -157,8 +171,39 @@ class Application(models.Model):
     
 class Bookmark(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE)
+    scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name='bookmarks')
     bookmarked_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     class Meta:
         unique_together = ('user', 'scholarship')
+
+
+class Profile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    full_name = models.CharField(max_length=150, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    country = models.CharField(max_length=100, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    level = models.ManyToManyField(Level, related_name='profiles', blank=True)
+    tags = models.ManyToManyField(Tag, related_name='profiles', blank=True)
+    field_of_study = models.CharField(max_length=100, blank=True)
+    institution = models.CharField(max_length=150, blank=True)
+    graduation_year = models.PositiveIntegerField(null=True, blank=True)
+    preferred_countries = models.TextField(blank=True, help_text="Countries where user prefers scholarships")
+    preferred_scholarship_types = models.TextField(blank=True, help_text="Merit-based, Need-based, Research, etc.")
+    bio = models.TextField(blank=True)
+    profile_picture = models.ImageField(upload_to="profiles/", null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username}'s Profile"
+
+class ScrapeFailureLog(models.Model):
+    url = models.URLField()
+    error = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    retried = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Failed scrape {self.url} at {self.created_at}"

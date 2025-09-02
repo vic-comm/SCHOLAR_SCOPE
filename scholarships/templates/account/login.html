@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% comment %} 
 {% load widget_tweaks %}
 {% load allauth account %}
 {% block head_title %}
@@ -53,6 +54,196 @@
         {% include "socialaccount/snippets/login.html" with page_layout="entrance" %}
     {% endif %}
 {% endblock content %}
+{% block extra_body %}
+    {{ block.super }}
+    {% if PASSKEY_LOGIN_ENABLED %}
+        {% include "mfa/webauthn/snippets/login_script.html" with button_id="passkey_login" %}
+    {% endif %}
+{% endblock %} {% endcomment %}
+{% comment %} {% extends "base.html" %} {% endcomment %}
+{% load widget_tweaks %}
+{% load allauth account %}
+
+{% block head_title %}
+    {% trans "Sign In" %}
+{% endblock head_title %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8 animate-fade-in">
+        <div class="text-center">
+            {% element h1 class="text-3xl font-light text-white mb-2 animate-slide-down" %}
+                {% trans "Sign In" %}
+            {% endelement %}
+            
+            {% if not SOCIALACCOUNT_ONLY %}
+                {% setvar link %}
+                    <a href="{{ signup_url }}" class="text-blue-400 hover:text-blue-300 transition-colors duration-300 underline decoration-transparent hover:decoration-blue-400">
+                {% endsetvar %}
+                {% setvar end_link %}
+                    </a>
+                {% endsetvar %}
+                
+                {% element p class="text-gray-400 animate-slide-down delay-100" %}
+                    {% blocktranslate %}If you have not created an account yet, then please {{ link }}sign up{{ end_link }} first.{% endblocktranslate %}
+                {% endelement %}
+            {% endif %}
+        </div>
+        
+        {% if not SOCIALACCOUNT_ONLY %}
+            {% url 'account_login' as login_url %}
+            {% element form form=form method="post" action=login_url tags="entrance,login" class="mt-8 space-y-6 animate-slide-up delay-200" %}
+                {% slot body %}
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                        <div class="bg-red-900/20 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg animate-shake">
+                            {{ form.non_field_errors | safe }}
+                        </div>
+                    {% endif %}
+                    
+                    <div class="space-y-4">
+                        {% for field in form.visible_fields %}
+                            {% if field.field.widget.input_type == 'checkbox' %}
+                                <div class="flex items-center space-x-3 animate-slide-up delay-500">
+                                    {% render_field field class="h-4 w-4 text-blue-600 bg-gray-800 border-gray-600 rounded focus:ring-blue-500 focus:ring-2 transition-all duration-300" %}
+                                    <label for="{{ field.id_for_label }}" class="text-sm text-gray-300 cursor-pointer hover:text-white transition-colors duration-300">
+                                        {{ field.label }}
+                                    </label>
+                                </div>
+                            {% else %}
+                                <div class="animate-slide-up delay-{{ forloop.counter|add:2 }}00">
+                                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
+                                        {{ field.label }}
+                                    </label>
+                                    {% render_field field class="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 hover:border-gray-500" placeholder=field.label %}
+                                    {% if field.errors %}
+                                        <div class="mt-2 text-sm text-red-400 animate-slide-down">
+                                            {{ field.errors | safe }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    
+                    {{ redirect_field }}
+                {% endslot %}
+                
+                {% slot actions %}
+                    <div class="animate-slide-up delay-600">
+                        {% element button type="submit" tags="prominent,login" class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0" %}
+                            <span class="relative">{% trans "Sign In" %}</span>
+                            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+                        {% endelement %}
+                    </div>
+                {% endslot %}
+            {% endelement %}
+        {% endif %}
+        
+        {% if LOGIN_BY_CODE_ENABLED or PASSKEY_LOGIN_ENABLED %}
+            <div class="animate-slide-up delay-700">
+                <div class="relative my-6">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-gray-600"></div>
+                    </div>
+                    <div class="relative flex justify-center text-sm">
+                        <span class="px-2 bg-gray-900 text-gray-400">Or continue with</span>
+                    </div>
+                </div>
+                
+                <div class="space-y-3">
+                    {% if PASSKEY_LOGIN_ENABLED %}
+                        {% element button type="submit" form="mfa_login" id="passkey_login" tags="prominent,login,outline,primary" class="w-full py-3 px-4 border border-gray-600 rounded-lg text-gray-300 bg-gray-800 hover:bg-gray-700 hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 transform hover:-translate-y-0.5" %}
+                            {% trans "Sign in with a passkey" %}
+                        {% endelement %}
+                    {% endif %}
+                    {% if LOGIN_BY_CODE_ENABLED %}
+                        {% element button href=request_login_code_url tags="prominent,login,outline,primary" class="w-full py-3 px-4 border border-gray-600 rounded-lg text-gray-300 bg-gray-800 hover:bg-gray-700 hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 transform hover:-translate-y-0.5" %}
+                            {% trans "Send me a sign-in code" %}
+                        {% endelement %}
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+        
+        {% if SOCIALACCOUNT_ENABLED %}
+            <div class="animate-slide-up delay-800">
+                <div class="relative my-6">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-gray-600"></div>
+                    </div>
+                    <div class="relative flex justify-center text-sm">
+                        <span class="px-2 bg-gray-900 text-gray-400">Or</span>
+                    </div>
+                </div>
+                {% include "socialaccount/snippets/login.html" with page_layout="entrance" %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+    @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes slide-down {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes slide-up {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-4px); }
+        75% { transform: translateX(4px); }
+    }
+    
+    .animate-fade-in {
+        animation: fade-in 0.6s ease-out;
+    }
+    
+    .animate-slide-down {
+        animation: slide-down 0.5s ease-out;
+    }
+    
+    .animate-slide-up {
+        animation: slide-up 0.5s ease-out;
+    }
+    
+    .animate-shake {
+        animation: shake 0.5s ease-in-out;
+    }
+    
+    .delay-100 { animation-delay: 0.1s; animation-fill-mode: both; }
+    .delay-200 { animation-delay: 0.2s; animation-fill-mode: both; }
+    .delay-300 { animation-delay: 0.3s; animation-fill-mode: both; }
+    .delay-400 { animation-delay: 0.4s; animation-fill-mode: both; }
+    .delay-500 { animation-delay: 0.5s; animation-fill-mode: both; }
+    .delay-600 { animation-delay: 0.6s; animation-fill-mode: both; }
+    .delay-700 { animation-delay: 0.7s; animation-fill-mode: both; }
+    .delay-800 { animation-delay: 0.8s; animation-fill-mode: both; }
+</style>
+{% endblock content %}
+
 {% block extra_body %}
     {{ block.super }}
     {% if PASSKEY_LOGIN_ENABLED %}

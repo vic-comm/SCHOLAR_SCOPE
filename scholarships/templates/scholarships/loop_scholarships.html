@@ -1,0 +1,196 @@
+ {% comment %} <div class="container mx-auto px-6 pb-24">
+    <div class="grid gap-8 md:gap-10">
+      {% for scholarship in scholarships %}
+      <div class="group relative bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-8 hover:bg-gray-800/70 transition-all duration-300 hover:border-blue-500/50 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1">
+        <!-- Gradient overlay on hover -->
+        <div class="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        
+        <div class="relative flex flex-col lg:flex-row gap-6">
+          <!-- Left sidebar with metadata -->
+          <div class="lg:w-80 flex-shrink-0">
+            <div class="space-y-4">
+              <div class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-full border border-blue-500/30">
+                <svg class="w-5 h-5 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                </svg>
+                <span class="text-blue-400 font-medium text-sm">Scholarship</span>
+              </div>
+              
+              <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-700/50">
+                <div class="flex items-center mb-3">
+                  <svg class="w-5 h-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                  </svg>
+                  <span class="text-gray-300 font-medium text-sm">Application Deadline</span>
+                </div>
+                <p class="text-red-400 font-semibold text-lg">{{ scholarship.end_date }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main content -->
+          <div class="flex-1 space-y-6">
+            <div>
+              <h2 class="text-2xl md:text-3xl font-bold text-white mb-4 group-hover:text-blue-400 transition-colors duration-300">
+                {{ scholarship.title }}
+              </h2>
+              <div class="prose prose-gray max-w-none">
+                <p class="text-gray-300 leading-relaxed text-lg">
+                  {{ scholarship.description|truncatewords:30|linebreaks }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex flex-wrap gap-4 pt-4">
+              <a href='{% url "scholarship_detail" scholarship.id %}' 
+                 class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5 group/btn">
+                <span>Learn More</span>
+                <svg class="w-5 h-5 ml-2 group-hover/btn:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
+                </svg>
+              </a>
+              
+              <!-- For each scholarship -->
+            {% include 'partials/bookmark_button.html' %}
+
+            </div>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <div class="text-center py-16">
+        <div class="bg-gray-800/50 rounded-2xl p-12 max-w-md mx-auto border border-gray-700/50">
+          <svg class="w-16 h-16 text-gray-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+          </svg>
+          <h3 class="text-xl font-semibold text-white mb-2">No Scholarships Available</h3>
+          <p class="text-gray-400">Check back later for new opportunities</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div hx-get="{% url 'scholarship_list'%}?page={{ page|add:1}}"
+      hx-trigger='revealed'
+      hx-target='this'
+      hx-swap='outerHTML'>
+    Loading
+  </div> {% endcomment %}
+
+  <div class="container mx-auto px-6 pb-24">
+    <div class="grid gap-8 md:gap-10">
+      {% for scholarship in scholarships %}
+      <div class="bg-gray-800 border border-gray-700 rounded-xl p-8 hover:bg-gray-750 hover:border-gray-600">
+        <div class="flex flex-col lg:flex-row gap-6">
+          <!-- Left sidebar with metadata -->
+          <div class="lg:w-80 flex-shrink-0">
+            <div class="space-y-4">
+              <div class="inline-flex items-center px-4 py-2 bg-blue-900 rounded-lg border border-blue-700">
+                <svg class="w-5 h-5 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                </svg>
+                <span class="text-blue-300 font-medium text-sm">Scholarship</span>
+              </div>
+              
+              <div class="bg-gray-900 rounded-xl p-4 border border-gray-700">
+                <div class="flex items-center mb-3">
+                  <svg class="w-5 h-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                  </svg>
+                  <span class="text-gray-300 font-medium text-sm">Application Deadline</span>
+                </div>
+                <p class="text-red-400 font-semibold text-lg">{{ scholarship.end_date }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main content -->
+          <div class="flex-1 space-y-6">
+            <div>
+              <h2 class="text-2xl md:text-3xl font-bold text-white mb-4">
+                {{ scholarship.title }}
+              </h2>
+              <div class="prose prose-gray max-w-none">
+                <p class="text-gray-300 leading-relaxed text-lg">
+                  {{ scholarship.description|truncatewords:30|linebreaks }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex flex-wrap gap-4 pt-4">
+              <a href='{% url "scholarship_detail" scholarship.id %}' 
+                 class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900">
+                <span>Learn More</span>
+                <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
+                </svg>
+              </a>
+              
+              <!-- Bookmark button -->
+              {% comment %} <div id="bookmark-btn-{{ scholarship.id }}" class="inline-block">
+                {% if scholarship.id in bookmarked_ids %}
+                    <form hx-post="{% url 'remove_bookmark' scholarship.id %}" 
+                          hx-target="#bookmark-btn-{{ scholarship.id }}" 
+                          hx-swap="outerHTML"
+                          class="inline-block">
+                        {% csrf_token %}
+                        <button type="submit" 
+                                class="inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                                title="{% trans 'Remove from bookmarks' %}">
+                            <svg class="h-4 w-4 mr-2 fill-current" viewBox="0 0 24 24">
+                                <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+                            </svg>
+                            {% trans "Bookmarked" %}
+                        </button>
+                    </form>
+                {% else %}
+                    <form hx-post="{% url 'bookmark' scholarship.id %}" 
+                          hx-target="#bookmark-btn-{{ scholarship.id }}" 
+                          hx-swap="outerHTML"
+                          class="inline-block">
+                        {% csrf_token %}
+                        <button type="submit" 
+                                class="inline-flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 hover:border-gray-500 text-gray-300 hover:text-white text-sm font-medium rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                                title="{% trans 'Add to bookmarks' %}">
+                            <svg class="h-4 w-4 mr-2 stroke-current" fill="none" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+                            </svg>
+                            {% trans "Bookmark" %}
+                        </button>
+                    </form>
+                {% endif %}
+              </div> {% endcomment %}
+              {% include 'partials/bookmark_button.html' %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <div class="text-center py-16">
+        <div class="bg-gray-800 rounded-xl p-12 max-w-md mx-auto border border-gray-700">
+          <svg class="w-16 h-16 text-gray-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+          </svg>
+          <h3 class="text-xl font-semibold text-white mb-2">No Scholarships Available</h3>
+          <p class="text-gray-400">Check back later for new opportunities</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  
+  <div hx-get="{% url 'scholarship_list'%}?page={{ page|add:1}}"
+       hx-trigger='revealed'
+       hx-target='this'
+       hx-swap='outerHTML'
+       class="text-center py-8">
+    <div class="inline-flex items-center px-4 py-2 bg-gray-800 text-gray-300 rounded-lg border border-gray-700">
+      <svg class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      Loading more scholarships...
+    </div>
+  </div>

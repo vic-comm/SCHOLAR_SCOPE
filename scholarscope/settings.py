@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     'django.contrib.sites',
+    'rest_framework',
     'taggit',
     'allauth',
     'allauth.account',
@@ -46,7 +47,9 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'django_celery_results',
     'widget_tweaks',
+    'django_htmx',
     'scholarships.apps.ScholarshipsConfig',
+     "debug_toolbar",
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -62,9 +65,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+     "django_htmx.middleware.HtmxMiddleware",
 ]
 
 ROOT_URLCONF = "scholarscope.urls"
@@ -140,19 +145,19 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = 'scholarships.User'
 
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'APP': {
-            'client_id': config('GOOGLE_OAUTH_CLIENT_ID'),
-            'secret': config('GOOGLE_OAUTH_CLIENT_SECRET'),
-            'key': ''
-        },
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-    }
-}
+# SOCIALACCOUNT_PROVIDERS = {
+#     'google': {
+#         'APP': {
+#             'client_id': config('GOOGLE_OAUTH_CLIENT_ID'),
+#             'secret': config('GOOGLE_OAUTH_CLIENT_SECRET'),
+#             'key': ''
+#         },
+#         'SCOPE': [
+#             'profile',
+#             'email',
+#         ],
+#     }
+# }
 
 # ACCOUNT_AUTHENTICATION_METHOD = "username_email"
 ACCOUNT_LOGIN_METHODS = {'username', 'email'}
@@ -162,12 +167,62 @@ ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
 CELERY_RESULT_BACKEND='django-db'
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=True
 
-CELERY_BROKER_URL = config('CELERY_REDIS_BROKER_URL', default='redis://localhost:6170')
+CELERY_BROKER_URL = config('CELERY_BROKER_URL')
 CELERY_BEAT_SCHEDULER='django_celery_beat.schedulers.DatabaseScheduler'
 
 LOGIN_REDIRECT_URL = 'scholarship_list'
-LOGOUT_REDIRECT_URL = 'login'
+LOGOUT_REDIRECT_URL = 'account_login'
+# if DEBUG:
+#     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+#     EMAIL_HOST = 'smtp.gmail.com'
+#     EMAIL_HOST_USER = config('EMAIL_ADDRESS')
+#     EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+#     EMAIL_PORT = 587
+#     EMAIL_USE_TLS = True
+#     DEFAULT_FROM_EMAIL = F"SCHOLARSCOPE {config('EMAIL_ADDRESS')}"
+#     ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
+# else:
+#     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# if DEBUG:
+#     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+#     DEFAULT_FROM_EMAIL = f"SCHOLARSCOPE <{config('EMAIL_ADDRESS')}>"
+#     ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
+# else:
+#     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+#     EMAIL_HOST = 'smtp.gmail.com'
+#     EMAIL_HOST_USER = config('EMAIL_ADDRESS')
+#     EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+#     EMAIL_PORT = 587
+#     EMAIL_USE_TLS = True
+#     DEFAULT_FROM_EMAIL = f"SCHOLARSCOPE <{config('EMAIL_ADDRESS')}>"
+#     ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_HOST_USER = config('EMAIL_ADDRESS')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+DEFAULT_FROM_EMAIL = f"SCHOLARSCOPE <{config('EMAIL_ADDRESS')}>"
+ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
 
 SITE_ID = 1
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",  # DB 1
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+INTERNAL_IPS = [
+    # ...
+    "127.0.0.1",
+    # ...
+]
+
+SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")

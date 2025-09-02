@@ -1,5 +1,5 @@
 from django import forms
-from .models import Application, Scholarship
+from .models import Application, Scholarship, Profile
 
 class ScholarshipModelForm(forms.ModelForm):
     class Meta:
@@ -13,3 +13,12 @@ class ApplicationStatusUpdateForm(forms.ModelForm):
         model = Application
         fields = ['status']
         widgets = {'status': forms.Select(attrs={'class':'form-select', 'onchange':'this.form.submit()'})}
+
+class ProfileForm(forms.ModelForm):
+    class Meta:
+        model = Profile
+        exclude = ['created_at', 'updated_at', 'user',]
+        widgets = {
+            'tags': forms.CheckboxSelectMultiple,   
+            'level': forms.CheckboxSelectMultiple,  
+        }

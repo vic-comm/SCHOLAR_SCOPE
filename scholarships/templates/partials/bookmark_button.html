@@ -1,0 +1,54 @@
+{% comment %} <div id="bookmark-btn-{{ scholarship.id }}">
+    {% if scholarship.id in bookmarked_ids %}
+        <form hx-post="{% url 'remove_bookmark' scholarship.id %}" 
+              hx-target="#bookmark-btn-{{ scholarship.id }}" 
+              hx-swap="outerHTML">
+            {% csrf_token %}
+            <button class="btn btn-warning">Bookmarked</button>
+        </form>
+    {% else %}
+        <form hx-post="{% url 'bookmark' scholarship.id %}" 
+              hx-target="#bookmark-btn-{{ scholarship.id }}" 
+              hx-swap="outerHTML">
+            {% csrf_token %}
+            <button class="btn btn-outline-secondary">Bookmark</button>
+        </form>
+    {% endif %}
+</div> {% endcomment %}
+<div id="bookmark-btn-{{ scholarship.id }}" class="inline-block">
+    {% if scholarship.id in bookmarked_ids %}
+        <!-- Bookmarked State -->
+        <form hx-post="{% url 'remove_bookmark' scholarship.id %}" 
+              hx-target="#bookmark-btn-{{ scholarship.id }}" 
+              hx-swap="outerHTML"
+              class="inline-block">
+            {% csrf_token %}
+            <button type="submit" 
+                    class="inline-flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                    >
+                <!-- Filled Bookmark Icon -->
+                <svg class="h-4 w-4 mr-2 fill-current" viewBox="0 0 24 24">
+                    <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+                </svg>
+                Bookmarked
+            </button>
+        </form>
+    {% else %}
+        <!-- Not Bookmarked State -->
+        <form hx-post="{% url 'bookmark' scholarship.id %}" 
+              hx-target="#bookmark-btn-{{ scholarship.id }}" 
+              hx-swap="outerHTML"
+              class="inline-block">
+            {% csrf_token %}
+            <button type="submit" 
+                    class="inline-flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 hover:border-gray-500 text-gray-300 hover:text-white text-sm font-medium rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                    >
+                <!-- Outline Bookmark Icon -->
+                <svg class="h-4 w-4 mr-2 stroke-current" fill="none" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+                </svg>
+                Bookmark
+            </button>
+        </form>
+    {% endif %}
+</div>
