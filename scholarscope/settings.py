@@ -23,9 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('DJANGO_SECRET_KEY')
 # 6dik9^mld%u(9jwj-t@o758h$(^7d@#d*&he&j-2ovo=v6slh@
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -109,15 +109,24 @@ WSGI_APPLICATION = "scholarscope.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+if DEBUG:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
+else:
+    import dj_database_url
+    # DATABASES['default'] = dj_database_url.parse(config('DATABASE_URL'))
 
-
+    DATABASES = {
+        "default": dj_database_url.parse(
+            config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -165,19 +174,19 @@ MEDIA_ROOT= BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = 'scholarships.User'
 
-# SOCIALACCOUNT_PROVIDERS = {
-#     'google': {
-#         'APP': {
-#             'client_id': config('GOOGLE_OAUTH_CLIENT_ID'),
-#             'secret': config('GOOGLE_OAUTH_CLIENT_SECRET'),
-#             'key': ''
-#         },
-#         'SCOPE': [
-#             'profile',
-#             'email',
-#         ],
-#     }
-# }
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': config('GOOGLE_OAUTH_CLIENT_ID'),
+            'secret': config('GOOGLE_OAUTH_CLIENT_SECRET'),
+            'key': ''
+        },
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+    }
+}
 
 # ACCOUNT_AUTHENTICATION_METHOD = "username_email"
 ACCOUNT_LOGIN_METHODS = {'username', 'email'}

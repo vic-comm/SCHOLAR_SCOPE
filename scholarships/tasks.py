@@ -92,7 +92,7 @@ def scrape_single_url(self, url, event_id=None):
         scrape_event = None
         if event_id:
             scrape_event = ScholarshipScrapeEvent.objects.get(id=event_id)
-        data = helpers.main_scholarship_scraper(url, 5)
+        data = helpers.main_scholarship_scraper(url)
         scholarships = data['scholarships']
         bulk_create(scholarships, url, url, scrape_event=scrape_event)
     except Exception as exc:
