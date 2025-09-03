@@ -50,7 +50,15 @@ INSTALLED_APPS = [
     'django_htmx',
     'scholarships.apps.ScholarshipsConfig',
      "debug_toolbar",
-]
+     'tailwind',
+     'theme',
+     ]
+
+TAILWIND_APP_NAME='theme'
+NPM_BIN_PATH = r"C:\Program Files\nodejs\npm.cmd"
+
+if DEBUG:
+    INSTALLED_APPS += ['django_browser_reload']
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
@@ -61,6 +69,7 @@ AUTHENTICATION_BACKENDS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -72,6 +81,12 @@ MIDDLEWARE = [
      "django_htmx.middleware.HtmxMiddleware",
 ]
 
+if DEBUG:
+    # Add django_browser_reload middleware only in DEBUG mode
+    MIDDLEWARE += [
+        "django_browser_reload.middleware.BrowserReloadMiddleware",
+    ]
+    
 ROOT_URLCONF = "scholarscope.urls"
 
 TEMPLATES = [
@@ -138,6 +153,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_FILES = [ BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+MEDIA_URL= 'media/'
+MEDIA_ROOT= BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -226,3 +246,5 @@ INTERNAL_IPS = [
 ]
 
 SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
+
+INTERNAL_IPS = ['127.0.0.1', 'localhost:8000']

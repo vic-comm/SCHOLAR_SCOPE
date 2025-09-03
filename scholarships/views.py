@@ -29,6 +29,9 @@ class ScholarshipList(LoginRequiredMixin, generic.View):
                 Q(description__icontains=query) |
                 Q(tags__name__icontains=query)
             ).distinct()
+        if request.GET.get('level'):
+            level = request.GET.get('level')
+            scholarships = Scholarship.objects.filter(level__level__iexact=level)
         paginator = Paginator(scholarships, 10)
         page = int(request.GET.get('page', 1))
         try:
