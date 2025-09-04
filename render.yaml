@@ -1,36 +1,111 @@
+# services:
+#   - type: web
+#     name: scholarscope-web
+#     env: python
+#     buildCommand: |
+#       pip install --upgrade maturin
+#       pip install -r requirements.txt
+#       python manage.py collectstatic --noinput
+#       python manage.py migrate
+#       export CARGO_HOME=/tmp/cargo && pip install .
+#       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+#       source $HOME/.cargo/env
+#     startCommand: gunicorn scholarscope.wsgi:application --bind 0.0.0.0:$PORT
+#     envVars:
+#       - key: REDIS_URL
+#         sync: false
+#       - key: DATABASE_URL
+#         sync: false
+
+#   - type: worker
+#     name: scholarscope-worker
+#     env: python
+#     buildCommand: ""
+#     startCommand: celery -A scholarscope worker -l info
+#     envVars:
+#       - key: REDIS_URL
+#         sync: false
+#       - key: DATABASE_URL
+#         sync: false
+
+#   - type: worker
+#     name: scholarscope-beat
+#     env: python
+#     buildCommand: ""
+#     startCommand: celery -A scholarscope beat -l info
+#     envVars:
+#       - key: REDIS_URL
+#         sync: false
+#       - key: DATABASE_URL
+#         sync: false
+
 services:
   - type: web
     name: scholarscope-web
     env: python
     buildCommand: |
+      # Install Rust toolchain first
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      source $HOME/.cargo/env
+      # Set CARGO_HOME to a writable directory
+      export CARGO_HOME=/tmp/cargo
+      # Upgrade pip and install maturin
+      pip install --upgrade pip maturin
+      # Install Python dependencies
       pip install -r requirements.txt
+      # Build and install the Rust-based Python package
+      pip install .
+      # Collect static files
       python manage.py collectstatic --noinput
+    startCommand: |
+      # Run migrations at startup to ensure DB is ready
       python manage.py migrate
-    startCommand: gunicorn scholarscope.wsgi:application --bind 0.0.0.0:$PORT
+      # Start Gunicorn
+      gunicorn scholarscope.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: REDIS_URL
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: CARGO_HOME
+        value: /tmp/cargo
 
   - type: worker
     name: scholarscope-worker
     env: python
-    buildCommand: ""
+    buildCommand: |
+      # Install Rust toolchain (if needed by worker)
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup lam sh -s -- -y
+      source $HOME/.cargo/env
+      export CARGO_HOME=/tmp/cargo
+      pip install --upgrade pip maturin
+      pip install -r requirements.txt
+      pip install .
     startCommand: celery -A scholarscope worker -l info
     envVars:
       - key: REDIS_URL
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: CARGO_HOME
+        value: /tmp/cargo
 
   - type: worker
     name: scholarscope-beat
     env: python
-    buildCommand: ""
+    buildCommand: |
+      # Install Rust toolchain (if needed by beat)
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      source $HOME/.cargo/env
+      export CARGO_HOME=/tmp/cargo
+      pip install --upgrade pip maturin
+      pip install -r requirements.txt
+      pip install .
     startCommand: celery -A scholarscope beat -l info
     envVars:
       - key: REDIS_URL
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: CARGO_HOME
+        value: /tmp/cargo
