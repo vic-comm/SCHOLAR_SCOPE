@@ -13,3 +13,8 @@ urlpatterns = [path('create/', views.CreateScholarship.as_view(), name='create_s
                 path('save_scholarship/<int:sch_id>/', views.save_scholarship, name='save_scholarship'),
                 path('update_profile/', views.update_profile, name='update_profile'),
                 ]
+# REDIS_URL="rediss://default:AeCeAAIncDFlZTdmM2Y4ZWFlNzY0NzdjYTE5NTM2MDFlZWM1MzhhY3AxNTc1MDI@learning-mullet-57502.upstash.io:6379"
+# REDIS_URL='redis://127.0.0.1:6379/1'
+
+# SITE_URL=http://127.0.0.1:8000   # local
+# DATABASE_URL=postgresql://scholar_scope_zega_user:r20DiG12SL765MjoP8GN55PNNZY4ktPm@dpg-d2sm4qmmcj7s73ab3otg-a.oregon-postgres.render.com/scholar_scope_zega

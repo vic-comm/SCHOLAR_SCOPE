@@ -88,11 +88,11 @@ if DEBUG:
     ]
     
 ROOT_URLCONF = "scholarscope.urls"
-
+import os
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS":  [os.path.join(BASE_DIR, 'templates'), os.path.join(BASE_DIR, 'templates', 'allauth')],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -109,23 +109,23 @@ WSGI_APPLICATION = "scholarscope.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-if DEBUG:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
-else:
-    import dj_database_url
-    # DATABASES['default'] = dj_database_url.parse(config('DATABASE_URL'))
 
-    DATABASES = {
-        "default": dj_database_url.parse(
-            config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
-            conn_max_age=600,
-            ssl_require=True
-        )
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
+
+import dj_database_url
+# DATABASES['default'] = dj_database_url.parse(config('DATABASE_URL'))
+
+DATABASES = {
+    "default": dj_database_url.parse(
+        config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
+        conn_max_age=600,
+        ssl_require=True
+    )
     }
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -188,7 +188,9 @@ AUTH_USER_MODEL = 'scholarships.User'
 #     }
 # }
 
-REDIS_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/1")
+
+REDIS_URL = config("REDIS_URL")
+
 SOCIALACCOUNT_AUTO_SIGNUP = True
 ACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
@@ -256,7 +258,7 @@ CACHES = {
         "LOCATION": REDIS_URL,  # DB 1
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-             "CONNECTION_POOL_KWARGS": {"ssl_cert_reqs": None},
+             
         }
     }
 }
