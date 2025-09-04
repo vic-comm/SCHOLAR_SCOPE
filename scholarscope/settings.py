@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('DJANGO_SECRET_KEY')
 # 6dik9^mld%u(9jwj-t@o758h$(^7d@#d*&he&j-2ovo=v6slh@
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = config("DEBUG", default=False, cast=bool)
 
 ALLOWED_HOSTS = ['*']
 
@@ -174,29 +174,41 @@ MEDIA_ROOT= BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = 'scholarships.User'
 
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'APP': {
-            'client_id': config('GOOGLE_OAUTH_CLIENT_ID'),
-            'secret': config('GOOGLE_OAUTH_CLIENT_SECRET'),
-            'key': ''
-        },
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-    }
-}
+# SOCIALACCOUNT_PROVIDERS = {
+#     'google': {
+#         'APP': {
+#             'client_id': config('GOOGLE_OAUTH_CLIENT_ID'),
+#             'secret': config('GOOGLE_OAUTH_CLIENT_SECRET'),
+#             'key': ''
+#         },
+#         'SCOPE': [
+#             'profile',
+#             'email',
+#         ],
+#     }
+# }
 
+REDIS_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/1")
+SOCIALACCOUNT_AUTO_SIGNUP = True
+ACCOUNT_EMAIL_VERIFICATION = "none"
+SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+SOCIALACCOUNT_QUERY_EMAIL = True
+ACCOUNT_UNIQUE_EMAIL = True
+SOCIALACCOUNT_AUTO_SIGNUP = True
+# ACCOUNT_EMAIL_REQUIRED = True
 # ACCOUNT_AUTHENTICATION_METHOD = "username_email"
 ACCOUNT_LOGIN_METHODS = {'username', 'email'}
 # ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
 # ACCOUNT_EMAIL_VERIFICATION = "mandatory"
-CELERY_RESULT_BACKEND='django-db'
+SOCIALACCOUNT_ADAPTER="scholarscope.adapters.MySocialAccountAdapter"
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=True
 
-CELERY_BROKER_URL = config('CELERY_BROKER_URL')
 CELERY_BEAT_SCHEDULER='django_celery_beat.schedulers.DatabaseScheduler'
 
 LOGIN_REDIRECT_URL = 'scholarship_list'
@@ -241,18 +253,14 @@ SITE_ID = 1
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",  # DB 1
+        "LOCATION": REDIS_URL,  # DB 1
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+             "CONNECTION_POOL_KWARGS": {"ssl_cert_reqs": None},
         }
     }
 }
 
-INTERNAL_IPS = [
-    # ...
-    "127.0.0.1",
-    # ...
-]
 
 SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
 
