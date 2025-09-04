@@ -51,7 +51,7 @@ Brotli==1.1.0
 tzdata==2025.2
 
 # Image / PDF
-pillow==9.5.0  # pinned to avoid build errors
+Pillow>=10.0.1
 
 # Parsing / XML
 lxml==4.9.3  # pinned to avoid compilation issues

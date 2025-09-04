@@ -18,3 +18,4 @@ urlpatterns = [path('create/', views.CreateScholarship.as_view(), name='create_s
 
 # SITE_URL=http://127.0.0.1:8000   # local
 # DATABASE_URL=postgresql://scholar_scope_zega_user:r20DiG12SL765MjoP8GN55PNNZY4ktPm@dpg-d2sm4qmmcj7s73ab3otg-a.oregon-postgres.render.com/scholar_scope_zega
+
