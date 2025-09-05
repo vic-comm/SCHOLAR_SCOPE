@@ -34,5 +34,6 @@ python-slugify==8.0.4
 # Security
 cryptography==45.0.3
 
-selenium
+rapidfuzz==3.0.0
+selenium==4.13.0
 django-debug-toolbar==6.0.0
