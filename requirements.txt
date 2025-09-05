@@ -7,70 +7,27 @@ django-htmx==1.23.2
 django-redis==6.0.0
 django-celery-beat==2.8.1
 django_celery_results==2.6.0
+django-taggit==6.1.0
+django-timezone-field==7.1
 django-widget-tweaks==1.5.0
-django-tailwind==4.2.0
-gunicorn>=21.2.0 
-# Celery & Broker
-celery==5.5.3
-amqp==5.3.1
-kombu==5.5.4
-flower==2.0.1
 
-# Python utilities
-attrs==25.3.0
-cffi==1.15.1
-pycparser==2.22
-python-decouple==3.8
-python-dotenv==1.1.1
-requests==2.32.3
-urllib3==2.4.0
-idna==3.10
-certifi==2025.4.26
-charset-normalizer==3.4.2
-
-# Database
+# Deployment
+gunicorn==23.0.0
+whitenoise==6.9.0
+dj-database-url==3.0.1
 psycopg2-binary==2.9.10
-aiosqlite==0.21.0
+python-decouple==3.8
 
-# Async / HTTP
-aiohttp==3.12.15
-aiofiles==24.1.0
-anyio==4.9.0
-
-# Frontend / forms
-Jinja2==3.1.6
-MarkupSafe==3.0.2
-bleach==6.2.0
-beautifulsoup4==4.13.4
+# Task queue
+celery==5.5.3
+flower==2.0.1
+redis==6.2.0
 
 # Utilities
-jsonschema==4.24.0
-pytz==2025.2
-Brotli==1.1.0
-tzdata==2025.2
-
-# Image / PDF
-Pillow>=10.0.1
-
-# Parsing / XML
+requests==2.32.3
 lxml==5.2.2
+pillow==10.4.0
+python-slugify==8.0.4
 
-# # Math / data
-# numpy==1.25.2  # pinned prebuilt wheel
-# scipy==1.11.2 # pinned prebuilt wheel
-
-# Logging / monitoring
-python-json-logger==3.3.0
-prometheus_client==0.22.1
-
-# Development / tools
-ipython==9.3.0
-ipykernel==6.29.5
-notebook==7.4.3
-
-# Optional / safe social login
-oauthlib==3.2.2
-requests-oauthlib==2.0.0
-
-# Remove these in Render builds:
-# pywinpty, pywin32, fastuuid, pydantic_core, tf-playwright-stealth, playwright
+# Security
+cryptography==45.0.3
