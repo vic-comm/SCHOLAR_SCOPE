@@ -37,3 +37,5 @@ cryptography==45.0.3
 rapidfuzz==3.0.0
 selenium==4.13.0
 django-debug-toolbar==6.0.0
+beautifulsoup4==4.12.2
+
