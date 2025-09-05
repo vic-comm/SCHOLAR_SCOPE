@@ -8,7 +8,10 @@
     <meta name="description" content="Discover and apply for scholarships tailored to your academic journey. Find undergraduate and graduate funding opportunities." />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#6366f1" />
-    {% tailwind_css %}
+    {% comment %} {% tailwind_css %} {% endcomment %}
+    {% load static %}
+<link rel="stylesheet" href="{% static 'css/dist/styles.css' %}">
+
     <!-- Tailwind CSS + DaisyUI CDN -->
     {% comment %} <script src="https://cdn.tailwindcss.com"></script> {% endcomment %}
     <script>
