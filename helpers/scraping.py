@@ -2,16 +2,11 @@
 import json
 from typing import List
 import asyncio
-from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, CrawlResult
-from crawl4ai import JsonCssExtractionStrategy, LLMExtractionStrategy
-from crawl4ai import LLMConfig
-from crawl4ai import BrowserConfig
 import re
 import json
 import time
 from typing import List, Dict
 from urllib.parse import urljoin, urlparse
-from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CrawlResult
 from scholarships.models import Scholarship
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -57,122 +52,6 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 # Remove the decouple import since we're not using environment variables
 # from decouple import config
-def is_scholarship_link(href: str, text: str) -> bool:
-    """Determine if a link is likely a scholarship link"""
-    url_keywords = ["scholarship", "grant", "award", "fellowship", "bursary", "funding"]
-    text_keywords = url_keywords + ["opportunity"]
-
-    exclude_keywords = [
-        "contact", "about", "home", "login", "register", "privacy",
-        "terms", "cookie", "sitemap", "rss", "feed", "category",
-        "tag", "author", "archive", "search", "facebook", "twitter",
-        "instagram", "linkedin", "youtube", "whatsapp", "telegram"
-    ]
-
-    url_lower, text_lower = href.lower(), text.lower()
-
-    has_scholarship_keyword = (
-        any(k in url_lower for k in url_keywords) or
-        any(k in text_lower for k in text_keywords)
-    )
-    not_excluded = not any(k in url_lower or k in text_lower for k in exclude_keywords)
-
-
-    return has_scholarship_keyword and not_excluded
-
-def get_next_page_url(links: List[Dict], base_url: str) -> str | None:
-    """Find the next page link from extracted links"""
-    next_keywords = ["next", "older", "›", "»"]
-    for link in links:
-        text = link.get("text", "").strip().lower()
-        href = link.get("href")
-        if not href:
-            continue
-
-        if any(k in text for k in next_keywords):
-            return urljoin(base_url, href)
-
-    return None
-
-async def scholarship_list_scraper(list_url: str, max_scholarships: int = None) -> List[Dict]:
-    """
-    Crawl a scholarship listing page and extract scholarship links.
-    Handles pagination and basic filtering (like ScholarshipListScraper).
-    """
-    async with AsyncWebCrawler() as crawler:
-        config = CrawlerRunConfig()
-        all_scholarship_links = []
-        processed_urls = set()
-        page_num = 1
-        current_url = list_url
-
-        while True:
-            print(f"Scraping scholarship list page {page_num}: {current_url}")
-            results: List[CrawlResult] = await crawler.arun(current_url, config=config)
-            # print(results)
-
-            if not results:
-                print("No crawl results.")
-                break
-
-            result = results[0]
-            if not result.success:
-                print(f"Failed to scrape {current_url}")
-                break
-
-            # Extract internal + external links
-            links = result.links.get("internal", []) + result.links.get("external", [])
-            print(f"Found {len(links)} links on page {page_num}")
-            print(links)
-
-            page_links = []
-
-            for link in links:
-                href = link.get("href")
-                text = link.get("text", "").strip()
-                if not href:
-                    continue
-
-                full_url = urljoin(current_url, href)
-
-                if full_url in processed_urls:
-                    continue
-
-                if is_scholarship_link(href, text):
-                    scholarship_info = {
-                        "title": text,
-                        "url": full_url,
-                        "extracted_from": "crawl4ai"
-                    }
-                    page_links.append(scholarship_info)
-                    processed_urls.add(full_url)
-
-            if not page_links:
-                print("No scholarship links found on this page.")
-                break
-
-            all_scholarship_links.extend(page_links)
-            print(f"Extracted {len(page_links)} scholarships from page {page_num}")
-
-            # Check max limit
-            if max_scholarships and len(all_scholarship_links) >= max_scholarships:
-                all_scholarship_links = all_scholarship_links[:max_scholarships]
-                print(f"Reached maximum of {max_scholarships} scholarships.")
-                break
-
-            # Try to find next page
-            next_page_url = get_next_page_url(links, current_url)
-            if not next_page_url:
-                print("No more pages available.")
-                break
-
-            current_url = next_page_url
-            page_num += 1
-            time.sleep(2)  # polite crawling
-
-        print(f"Total scholarships found: {len(all_scholarship_links)}")
-        return all_scholarship_links
-
 class ScholarshipSeleniumScraper:
     def __init__(self, chrome_driver_path=None):
         self.driver = None
@@ -1253,27 +1132,6 @@ import hashlib
 def generate_fingerprint(title, link):
         base = f"{title.lower().strip()}-{link}"
         return hashlib.sha256(base.encode()).hexdigest()
-
-import asyncio
-
-def run_async_task(coro):
-    """
-    Run an async coroutine safely inside Celery (or any existing event loop).
-    """
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If event loop already running, create a new temporary loop
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            result = new_loop.run_until_complete(coro)
-            new_loop.close()
-            return result
-        else:
-            return loop.run_until_complete(coro)
-    except RuntimeError:
-        # Fallback if no loop is available
-        return asyncio.run(coro)
 
 class ScholarshipBatchProcessor:
    
