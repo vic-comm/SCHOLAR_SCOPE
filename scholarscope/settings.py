@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'django_htmx',
     'scholarships.apps.ScholarshipsConfig',
-     'tailwind',
+     'django_tailwind',
      'theme',
      ]
 
