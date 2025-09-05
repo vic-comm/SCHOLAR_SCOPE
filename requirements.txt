@@ -31,3 +31,5 @@ python-slugify==8.0.4
 
 # Security
 cryptography==45.0.3
+
+django-debug-toolbar==6.0.0
