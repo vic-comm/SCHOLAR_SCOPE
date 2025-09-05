@@ -33,3 +33,45 @@ if settings.DEBUG:
     urlpatterns += [
         path("__reload__/", include("django_browser_reload.urls")),
     ]
+
+# # Core
+# Django==5.2.1
+# djangorestframework==3.15.2
+# django-allauth==65.8.1
+# django-filter==25.1
+# django-htmx==1.23.2
+# django-redis==6.0.0
+# django-celery-beat==2.8.1
+# django_celery_results==2.6.0
+# django-taggit==6.1.0
+# django-timezone-field==7.1
+# django-widget-tweaks==1.5.0
+# django-tailwind==4.2.0
+
+
+# # Deployment
+# gunicorn==23.0.0
+# whitenoise==6.9.0
+# dj-database-url==3.0.1
+# psycopg2-binary==2.9.10
+# python-decouple==3.8
+
+# # Task queue
+# celery==5.5.3
+# flower==2.0.1
+# redis==6.2.0
+
+# # Utilities
+# requests==2.32.3
+# lxml==5.2.2
+# pillow==10.4.0
+# python-slugify==8.0.4
+
+# # Security
+# cryptography==45.0.3
+
+# rapidfuzz==3.0.0
+# selenium==4.13.0
+# django-debug-toolbar==6.0.0
+# beautifulsoup4==4.12.2
+
