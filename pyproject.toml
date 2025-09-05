@@ -1,3 +1,6 @@
 [build-system]
 requires = ["setuptools>=70", "wheel", "pip>=25.2"]
 build-backend = "setuptools.build_meta"
+
+[tool.poetry.dependencies]
+python = "3.11.9"
