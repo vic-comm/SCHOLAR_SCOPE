@@ -49,7 +49,6 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'django_htmx',
     'scholarships.apps.ScholarshipsConfig',
-     "debug_toolbar",
      'tailwind',
      'theme',
      ]
@@ -58,7 +57,7 @@ TAILWIND_APP_NAME='theme'
 NPM_BIN_PATH = r"C:\Program Files\nodejs\npm.cmd"
 
 if DEBUG:
-    INSTALLED_APPS += ['django_browser_reload']
+    INSTALLED_APPS += ['django_browser_reload', "debug_toolbar",]
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
@@ -74,7 +73,6 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
@@ -85,6 +83,7 @@ if DEBUG:
     # Add django_browser_reload middleware only in DEBUG mode
     MIDDLEWARE += [
         "django_browser_reload.middleware.BrowserReloadMiddleware",
+        "debug_toolbar.middleware.DebugToolbarMiddleware",
     ]
     
 ROOT_URLCONF = "scholarscope.urls"
