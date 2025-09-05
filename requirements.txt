@@ -19,7 +19,6 @@ flower==2.0.1
 # Python utilities
 attrs==25.3.0
 cffi==1.15.1
-cryptography<40
 pycparser==2.22
 python-decouple==3.8
 python-dotenv==1.1.1
@@ -56,9 +55,9 @@ Pillow>=10.0.1
 # Parsing / XML
 lxml==4.9.3  # pinned to avoid compilation issues
 
-# Math / data
-numpy==1.25.2  # pinned prebuilt wheel
-scipy==1.11.2 # pinned prebuilt wheel
+# # Math / data
+# numpy==1.25.2  # pinned prebuilt wheel
+# scipy==1.11.2 # pinned prebuilt wheel
 
 # Logging / monitoring
 python-json-logger==3.3.0
