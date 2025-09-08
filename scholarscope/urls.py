@@ -76,3 +76,10 @@ if settings.DEBUG:
 # django-debug-toolbar==6.0.0
 # beautifulsoup4==4.12.2
 
+#   "scripts": {
+#     "start": "npm run dev",
+#     "build": "npm run build:clean && npm run build:tailwind",
+#     "build:clean": "rimraf ../static/css/dist",
+#     "build:tailwind": "cross-env NODE_ENV=production postcss ./src/styles.css -o ../static/css/dist/styles.css --minify",
+#     "dev": "cross-env NODE_ENV=development postcss ./src/styles.css -o ../static/css/dist/styles.css --watch"
+#   },
