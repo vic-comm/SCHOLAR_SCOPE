@@ -5,7 +5,10 @@ services:
     buildCommand: |
       pip install --upgrade pip setuptools wheel
       pip install -r requirements.txt
+      npm install --prefix theme/static_src
+      npm run build --prefix theme/static_src
       python manage.py collectstatic --noinput
+
     startCommand: |
       python manage.py migrate
       gunicorn scholarscope.wsgi:application --bind 0.0.0.0:$PORT
