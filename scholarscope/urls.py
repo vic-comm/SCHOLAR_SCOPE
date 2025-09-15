@@ -27,13 +27,6 @@ urlpatterns = [
 
 urlpatterns += static(settings.STATIC_URL, document=settings.STATIC_ROOT)
 
-if settings.DEBUG:
-    from debug_toolbar.toolbar import debug_toolbar_urls
-    urlpatterns += debug_toolbar_urls()
-    # Include django_browser_reload URLs only in DEBUG mode
-    urlpatterns += [
-        path("__reload__/", include("django_browser_reload.urls")),
-    ]
 
 # # Core
 # Django==5.2.1
