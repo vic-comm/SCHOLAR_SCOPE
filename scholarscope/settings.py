@@ -62,11 +62,8 @@ AUTHENTICATION_BACKENDS = [
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
-COMPRESS_ROOT = BASE_DIR / 'static'
 
-COMPRESS_ENABLED = True
 
-STATICFILES_FINDERS = ('compressor.finders.CompressorFinder',)
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -167,6 +164,7 @@ STATIC_URL = "/static/"
 
 STATICFILES_DIRS = [
     BASE_DIR / "static",   # project-level static
+    BASE_DIR / "theme" / "static_src",
 ]
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
