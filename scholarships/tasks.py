@@ -10,9 +10,10 @@ import hashlib
 from datetime import timedelta
 import platform
 import asyncio
+import logging
+logger = logging.getLogger(__name__)
 
-if platform.system() == "Windows":
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 def generate_slug(title):
     return slugify(title)
 
@@ -38,6 +39,13 @@ def bulk_create(scraped_scholarships, source_name, source_url=None, scrape_event
             if not scholarship_data:
                 continue
 
+            for field in ["start_date", "end_date"]:
+                dt = scholarship_data.get(field)
+                if dt and timezone.is_naive(dt):
+                    scholarship_data[field] = timezone.make_aware(dt)
+
+            
+
             link_dict = scholarship_data.get('link')  
             if isinstance(link_dict, dict):
                 link = link_dict.get('url', '')
@@ -62,6 +70,16 @@ def bulk_create(scraped_scholarships, source_name, source_url=None, scrape_event
                 scrape_event=scrape_event 
             )
             scholarship.fingerprint = fingerprint
+            
+            # for field in ["title", "reward", "source", "fingerprint", "link"]:
+            #     val = getattr(scholarship, field, None)
+            #     if isinstance(val, str) and len(val) > 500:
+            #         print(f"{field} length = {len(val)}  value={val[:120]}...")
+            for field in ["title", "reward", "source", "fingerprint", "link"]:
+                val = getattr(scholarship, field, None)
+                if isinstance(val, str) and len(val) > 500:
+                    logger.warning("%s length=%s value=%s...", field, len(val), val[:120])
+            logger.debug("About to save scholarship with title=%s", scholarship.title)
             scholarship.save()
             for level in levels:
                 level, _ = Level.objects.get_or_create(level=level)
@@ -86,13 +104,13 @@ def bulk_create(scraped_scholarships, source_name, source_url=None, scrape_event
         raise
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def scrape_single_url(self, url, event_id=None):
+def scrape_single_url(self, url, event_id=None, max_sch=None):
     
     try:
         scrape_event = None
         if event_id:
             scrape_event = ScholarshipScrapeEvent.objects.get(id=event_id)
-        data = helpers.main_scholarship_scraper(url)
+        data = helpers.main_scholarship_scraper(url, max_scholarships=max_sch)
         scholarships = data['scholarships']
         bulk_create(scholarships, url, url, scrape_event=scrape_event)
     except Exception as exc:
@@ -100,14 +118,16 @@ def scrape_single_url(self, url, event_id=None):
 
 
 @shared_task
-def scrape_scholarship_data():
+def scrape_scholarship_data(max_sch=None):
     list_urls = [
+        "https://scholarsworld.ng/scholarships/top-scholarships/",
+        "https://scholarsworld.ng/scholarships/undergraduate-scholarships/",
+        "https://scholarsworld.ng/scholarships/postgraduate-scholarships/",
         "https://www.scholarshipregion.com/category/undergraduate-scholarships/",
-        # "https://www.scholarshipregion.com/category/postgraduate-scholarships/",
-        
+        "https://www.scholarshipregion.com/category/postgraduate-scholarships/",
     ]
     for url in list_urls:
-        scrape_single_url(url)
+        scrape_single_url(url, max_sch=max_sch)
 
 @shared_task(bind=True)
 def send_email_reminder(self):

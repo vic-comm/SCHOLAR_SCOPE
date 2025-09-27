@@ -1,4 +1,5 @@
 services:
+  # Web service
   - type: web
     name: scholarscope-web
     env: python
@@ -8,16 +9,19 @@ services:
       npm install --prefix theme/static_src
       npm run build --prefix theme/static_src
       python manage.py collectstatic --noinput
-
-    startCommand: |
       python manage.py migrate
-      gunicorn scholarscope.wsgi:application --bind 0.0.0.0:$PORT
+    startCommand: gunicorn scholarscope.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: REDIS_URL
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: DEBUG
+        sync: false
 
+  # Celery worker
   - type: worker
     name: scholarscope-worker
     env: python
@@ -30,16 +34,21 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: SECRET_KEY
+        sync: false
 
+  # Celery beat (with django-celery-beat)
   - type: worker
     name: scholarscope-beat
     env: python
     buildCommand: |
       pip install --upgrade pip setuptools wheel
       pip install -r requirements.txt
-    startCommand: celery -A scholarscope beat -l info
+    startCommand: celery -A scholarscope beat -l info -S django
     envVars:
       - key: REDIS_URL
         sync: false
       - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
         sync: false

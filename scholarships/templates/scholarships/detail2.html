@@ -81,7 +81,7 @@
             <!-- Main Content -->
             <div class="lg:col-span-2">
                 <!-- Header Card -->
-                <div class="bg-gray-800 rounded-xl shadow-2xl overflow-hidden mb-8 border border-gray-700">
+                {% comment %} <div class="bg-gray-800 rounded-xl shadow-2xl overflow-hidden mb-8 border border-gray-700">
                     <div class="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-700 px-6 py-8 relative overflow-hidden">
                         <!-- Decorative background pattern -->
                         <div class="absolute inset-0 bg-black bg-opacity-10">
@@ -117,7 +117,48 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </div> {% endcomment %}
+                <div class="bg-slate-800 rounded-xl shadow-2xl overflow-hidden mb-8 border border-slate-700">
+    <div class="bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 px-6 py-8 relative overflow-hidden">
+        <!-- Enhanced decorative background pattern -->
+        <div class="absolute inset-0 bg-slate-900 bg-opacity-20">
+            <div class="absolute inset-0" style="background-image: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 24px 24px;"></div>
+        </div>
+        
+        <!-- Subtle overlay for better text contrast -->
+        <div class="absolute inset-0 bg-gradient-to-r from-slate-900/20 to-slate-800/20"></div>
+        
+        <div class="relative z-10">
+            <!-- Improved title with better font weight and text shadow -->
+            <h1 class="text-3xl lg:text-4xl font-black text-white mb-6 leading-tight drop-shadow-lg">{{ scholarship.title }}</h1>
+            
+            <!-- Status and Reward -->
+            <div class="flex flex-wrap items-center gap-4">
+                {% if scholarship.active %}
+                    <span class="inline-flex items-center px-5 py-3 rounded-full text-sm font-bold bg-emerald-600 text-white shadow-xl border border-emerald-500/50">
+                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                        </svg>
+                        Active
+                    </span>
+                {% else %}
+                    <span class="inline-flex items-center px-5 py-3 rounded-full text-sm font-bold bg-red-600 text-white shadow-xl border border-red-500/50">
+                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                        </svg>
+                        Inactive
+                    </span>
+                {% endif %}
+                
+                {% if scholarship.reward %}
+    <div class="bg-gray-700 px-6 py-3 rounded-xl">
+        <span class="text-white font-bold text-xl">{{ scholarship.reward }}</span>
+    </div>
+{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 
                 <!-- Timeline Card -->
                 {% if scholarship.start_date or scholarship.end_date %}
@@ -327,21 +368,6 @@
                             {% endif %}
                         {% endif %}
                         
-                        {% comment %} <a href="{% url 'apply' scholarship.id %}" target="_blank" rel="noopener noreferrer" 
-                           class="inline-flex items-center justify-center w-full px-6 py-4 text-base font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                            </svg>
-                            Apply Now
-                        </a>
-                        <a href="{% url 'save_scholarship' scholarship.id %}" target="_blank" rel="noopener noreferrer" 
-                           class="inline-flex items-center justify-center w-full px-6 py-4 text-base font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg">
-                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                            </svg>
-                            Save Scholarship
-                        </a> {% endcomment %}
-                        <!-- Apply Now Button - External link with distinct primary styling -->
                          <div class="space-y-4">
                         <a href="{% url 'apply' scholarship.id %}" target="_blank" rel="noopener noreferrer" 
                         class="inline-flex items-center justify-center w-full px-6 py-4 text-base font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg">

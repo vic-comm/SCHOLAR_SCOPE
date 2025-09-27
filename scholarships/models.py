@@ -17,10 +17,11 @@ class User(AbstractUser):
     )
     is_admin = models.BooleanField(default=False)
     bookmarked_scholarships = models.ManyToManyField('Scholarship', through='Bookmark', related_name='bookmarked_by')
+    email = models.EmailField(unique=True)
 
 class Tag(models.Model):
     name = models.CharField(
-        max_length=50,
+        max_length=100,
         unique=True,
         choices=[
              ('international','International'),
@@ -34,7 +35,7 @@ class Tag(models.Model):
         return self.name
     
 class Level(models.Model):
-    level = models.CharField(max_length=50, unique=True, 
+    level = models.CharField(max_length=100, unique=True, 
                             choices=(
                             ("highschool", "High School"),
                             ("undergraduate", "Undergraduate"),
@@ -46,22 +47,22 @@ class Level(models.Model):
         return self.level
     
 class Scholarship(models.Model):
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=500)
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
     tags = models.ManyToManyField(Tag, related_name='scholarships', blank=True)
     description = models.TextField()
     level = models.ManyToManyField(Level, related_name='scholarships', blank=True)
-    reward = models.CharField(max_length=255)
+    reward = models.CharField(max_length=1000)
     active = models.BooleanField(default=True)
-    link = models.URLField()
+    link = models.URLField(max_length=1000)
     scrape_event = models.ForeignKey('ScholarshipScrapeEvent', on_delete=models.SET_NULL, null=True, blank=True, related_name='scholarships')
-    eligibility = models.CharField(blank=True, null=True)
-    requirements = models.CharField(blank=True, null=True)
-    source = models.CharField(null=True, blank=True)
+    eligibility = models.CharField(blank=True, null=True, max_length=1000)
+    requirements = models.CharField(blank=True, null=True, max_length=1000)
+    source = models.CharField(null=True, blank=True, max_length=1000)
     created_at = models.DateTimeField(auto_now_add=True)
-    fingerprint = models.CharField(max_length=250, null=True, blank=True)
-    slug = models.SlugField(null=True, blank=True)
+    fingerprint = models.CharField(max_length=1000, null=True, blank=True)
+    slug = models.SlugField(null=True, blank=True, max_length=1000)
 
     def generate_unique_slug(self):
         base_slug = slugify(self.title)
@@ -71,10 +72,24 @@ class Scholarship(models.Model):
             slug = f"{base_slug}-{counter}"
             counter += 1
         return slug
-
+    
     def generate_fingerprint(self):
         base = f"{self.title.lower().strip()}-{self.link}"
         return hashlib.sha256(base.encode()).hexdigest()
+    
+    def save(self, *args, **kwargs):
+        # Auto-truncate any CharField / URLField that exceeds max_length
+        for field in self._meta.fields:
+            if hasattr(field, "max_length") and field.max_length:
+                val = getattr(self, field.name, None)
+                if isinstance(val, str) and len(val) > field.max_length:
+                    setattr(self, field.name, val[: field.max_length])
+
+        if not self.fingerprint:
+            self.fingerprint = self.generate_fingerprint()
+        if not self.slug:
+            self.slug = self.generate_unique_slug()
+        return super().save(*args, **kwargs)
     
     class Meta:
         unique_together = ['title', 'link']
@@ -159,7 +174,7 @@ class Application(models.Model):
     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name='applications')
     submitted_at = models.DateTimeField(auto_now=True)
     notes = models.TextField(blank=True, null=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=100, choices=STATUS_CHOICES, default='pending')
     
    
 

@@ -19,9 +19,11 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from scholarships import views 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path('', include('scholarships.urls')),
+     path('accounts/signup/', views.CustomSignUpView.as_view(), name='account_signup'),
     path('accounts/', include('allauth.urls')),
 ]
 

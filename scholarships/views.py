@@ -1,5 +1,7 @@
 from django.shortcuts import render, redirect, HttpResponseRedirect, get_object_or_404, HttpResponse
+from django.urls import reverse_lazy
 from django.views import generic
+from allauth.account.views import SignupView
 from .models import Scholarship, Bookmark, Application, Profile
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.postgres.search import SearchVector, SearchRank, SearchQuery
@@ -15,6 +17,9 @@ from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db.models import Q, Count
 # Create your views here.
+class CustomSignUpView(SignupView):
+    def get_success_url(self):
+        return reverse_lazy('update_profile')
 
 class ScholarshipList(LoginRequiredMixin, generic.View):
     template_name = 'scholarships/list.html'
@@ -28,7 +33,7 @@ class ScholarshipList(LoginRequiredMixin, generic.View):
                 Q(title__icontains=query) |
                 Q(description__icontains=query) |
                 Q(tags__name__icontains=query)
-            ).distinct()
+            ).distinct().order_by('-created_at')
         if request.GET.get('level'):
             level = request.GET.get('level')
             scholarships = Scholarship.objects.filter(level__level__iexact=level)
@@ -95,7 +100,7 @@ class DeleteScholarship(LoginRequiredMixin, generic.DeleteView):
     model = Scholarship
 
     def get_success_url(self):
-        return redirect('scholarship_list')
+        return reverse_lazy('scholarship_list')
 
 @login_required
 def bookmark(request, sch_id):
@@ -207,6 +212,8 @@ def update_profile(request):
         return redirect('dashboard')
     form = ProfileForm(instance=request.user.profile)
     return render(request, 'scholarships/profile.html', {'form': form})
+
+
     
 
 
@@ -232,42 +239,48 @@ def update_profile(request):
 
 
 
-@api_view(['GET'])
-def scholarship_list(request):
-    scholarships = Scholarship.objects.all()
-    serializer = ScholarshipSerializer(scholarships, many=True)
-    return Response(serializer.data)
+# services:
+#   - type: web
+#     name: scholarscope-web
+#     env: python
+#     buildCommand: |
+#       pip install --upgrade pip setuptools wheel
+#       pip install -r requirements.txt
+#       npm install --prefix theme/static_src
+#       npm run build --prefix theme/static_src
+#       python manage.py collectstatic --noinput
 
-@api_view(['GET'])
-def scholarship_detail(request, id):
-    scholarship = Scholarship.objects.get(id=id)
-    serializer = ScholarshipSerializer(scholarship)
-    return Response(serializer.data)
+#     startCommand: |
+#       python manage.py migrate
+#       gunicorn scholarscope.wsgi:application --bind 0.0.0.0:$PORT
+#     envVars:
+#       - key: REDIS_URL
+#         sync: false
+#       - key: DATABASE_URL
+#         sync: false
 
-# @api_view(['GET'])
-# def user_dashboard(request):
-#     user = request.user
-#     applied_scholarships = user.applied_scholarships.all()
-#     bookmarked_scholarships = user.bookmarked_scholarships.all()
-#     recent_applications = Application.objects.filter(
-#         user=user
-#     ).select_related('scholarship').order_by('-submitted_at')[:5]
-    
-#     recent_bookmarks = Bookmark.objects.filter(
-#         user=user
-#     ).select_related('scholarship').order_by('-bookmarked_at')[:10]
-    
-#     stats = {
-#         'total_applications': applied_scholarships.count(),
-#         'total_bookmarks': bookmarked_scholarships.count(),
-#         'pending_applications': Application.objects.filter(
-#             user=user, status='pending'
-#         ).count()
-#     }
-#     serializer = UserDashBoardSerializer({
-#         'recent_applications': recent_applications,
-#         'recent_bookmarks': recent_bookmarks,
-#         'stats': stats,
-#         'applied_scholarships': applied_scholarships,
-#         'bookmarked_scholarships': bookmarked_scholarships})
-#     return Response(serializer.data)
+#   - type: worker
+#     name: scholarscope-worker
+#     env: python
+#     buildCommand: |
+#       pip install --upgrade pip setuptools wheel
+#       pip install -r requirements.txt
+#     startCommand: celery -A scholarscope worker -l info
+#     envVars:
+#       - key: REDIS_URL
+#         sync: false
+#       - key: DATABASE_URL
+#         sync: false
+
+#   - type: worker
+#     name: scholarscope-beat
+#     env: python
+#     buildCommand: |
+#       pip install --upgrade pip setuptools wheel
+#       pip install -r requirements.txt
+#     startCommand: celery -A scholarscope beat -l info
+#     envVars:
+#       - key: REDIS_URL
+#         sync: false
+#       - key: DATABASE_URL
+#         sync: false

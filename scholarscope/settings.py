@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'django_htmx',
     'scholarships.apps.ScholarshipsConfig',
+    'compressor',
     'tailwind',
     'theme',
      ]
@@ -62,6 +63,11 @@ AUTHENTICATION_BACKENDS = [
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
+COMPRESS_ROOT = BASE_DIR / 'static'
+
+COMPRESS_ENABLED = True
+
+STATICFILES_FINDERS = ('compressor.finders.CompressorFinder',)
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -193,8 +199,11 @@ AUTH_USER_MODEL = 'scholarships.User'
 
 
 REDIS_URL = config("REDIS_URL")
+SOCIALACCOUNT_LOGIN_ON_GET = True
 
+# SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_AUTO_SIGNUP = True
+ACCOUNT_SIGNUP_REDIRECT_URL = '/' 
 ACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_QUERY_EMAIL = True
@@ -215,7 +224,7 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=True
 
 CELERY_BEAT_SCHEDULER='django_celery_beat.schedulers.DatabaseScheduler'
-
+SOCIALACCOUNT_AUTO_SIGNUP = True
 LOGIN_REDIRECT_URL = 'scholarship_list'
 LOGOUT_REDIRECT_URL = 'account_login'
 # if DEBUG:

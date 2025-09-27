@@ -2,6 +2,8 @@
 {% load i18n %}
 {% load widget_tweaks %}
 {% load allauth account %}
+{% load socialaccount %}
+
 
 {% block head_title %}
     {% trans "Sign In" %}
@@ -116,7 +118,21 @@
                         <span class="px-2 bg-gray-900 text-gray-400">Or</span>
                     </div>
                 </div>
-                {% include "socialaccount/snippets/login.html" with page_layout="entrance" %}
+                {% comment %} {% include "socialaccount/snippets/login.html" with page_layout="entrance" %} {% endcomment %}
+                <a href="{% provider_login_url 'google' %}?next=/"
+   class="w-full flex items-center justify-center py-3 px-4 border border-gray-600 rounded-lg 
+          text-gray-300 bg-gray-800 hover:bg-gray-700 hover:border-gray-500 
+          focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300 
+          transform hover:-translate-y-0.5">
+    <svg class="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+        <path fill="#4285F4" d="M24 9.5c3.94 0 6.64 1.7 8.17 3.12l5.97-5.97C34.64 3.4 29.9 1 24 1 14.9 1 7.09 6.58 3.6 14.2l6.91 5.37C12.6 13.5 17.9 9.5 24 9.5z"/>
+        <path fill="#34A853" d="M46.1 24.5c0-1.7-.15-3.4-.44-5H24v9.5h12.4c-.53 2.7-2.14 5-4.55 6.55l7.05 5.48C43.1 36.6 46.1 30.9 46.1 24.5z"/>
+        <path fill="#FBBC05" d="M10.5 28.7c-1.3-3.8-1.3-7.6 0-11.4L3.6 11.9c-3.7 7.4-3.7 16.5 0 23.8l6.9-5z"/>
+        <path fill="#EA4335" d="M24 47c6.5 0 12-2.1 16-5.7l-7.05-5.48c-2 1.3-4.6 2.1-7.55 2.1-6.1 0-11.4-4-13.3-9.5l-6.9 5C7.1 41.4 14.9 47 24 47z"/>
+    </svg>
+    <span>Sign in with Google</span>
+</a>
+
             </div>
         {% endif %}
     </div>

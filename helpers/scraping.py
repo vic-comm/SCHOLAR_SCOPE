@@ -348,12 +348,39 @@ class ScholarshipSeleniumScraper:
         except:
             return "Amount not specified"
 
+    # def extract_start_date(self):
+    #     """Extract application start date/opening date"""
+    #     try:
+    #         page_text = self.driver.find_element(By.TAG_NAME, "body").text
+            
+    #         # Look for start date patterns
+    #         start_patterns = [
+    #             r'application\s*(?:opens?|starts?)[:\s]*([^.!?\n]+)',
+    #             r'opening\s*date[:\s]*([^.!?\n]+)',
+    #             r'start\s*date[:\s]*([^.!?\n]+)',
+    #             r'begins?[:\s]*([^.!?\n]+)',
+    #             r'from[:\s]*([^.!?\n]+?)(?:\s*to\s*|\s*-\s*)',
+    #             r'available\s*from[:\s]*([^.!?\n]+)',
+    #             r'registration\s*(?:opens?|starts?)[:\s]*([^.!?\n]+)'
+    #         ]
+            
+    #         for pattern in start_patterns:
+    #             matches = re.findall(pattern, page_text, re.IGNORECASE)
+    #             if matches:
+    #                 date_text = matches[0].strip()
+    #                 parsed_date = self.parse_date_string(date_text)
+    #                 if parsed_date:
+    #                     return parsed_date.isoformat()
+            
+    #         return None
+            
+    #     except:
+    #         return None
     def extract_start_date(self):
         """Extract application start date/opening date"""
         try:
             page_text = self.driver.find_element(By.TAG_NAME, "body").text
-            
-            # Look for start date patterns
+
             start_patterns = [
                 r'application\s*(?:opens?|starts?)[:\s]*([^.!?\n]+)',
                 r'opening\s*date[:\s]*([^.!?\n]+)',
@@ -363,26 +390,53 @@ class ScholarshipSeleniumScraper:
                 r'available\s*from[:\s]*([^.!?\n]+)',
                 r'registration\s*(?:opens?|starts?)[:\s]*([^.!?\n]+)'
             ]
-            
+
             for pattern in start_patterns:
                 matches = re.findall(pattern, page_text, re.IGNORECASE)
                 if matches:
                     date_text = matches[0].strip()
                     parsed_date = self.parse_date_string(date_text)
                     if parsed_date:
-                        return parsed_date.isoformat()
-            
+                        return parsed_date   # ← return datetime, not isoformat
             return None
-            
-        except:
+        except Exception:
             return None
 
+
+    # def extract_end_date(self):
+    #     """Extract application deadline/end date"""
+    #     try:
+    #         page_text = self.driver.find_element(By.TAG_NAME, "body").text
+            
+    #         # Look for deadline patterns
+    #         deadline_patterns = [
+    #             r'deadline[:\s]*([^.!?\n]+)',
+    #             r'due date[:\s]*([^.!?\n]+)',
+    #             r'closing date[:\s]*([^.!?\n]+)',
+    #             r'last date[:\s]*([^.!?\n]+)',
+    #             r'application closes[:\s]*([^.!?\n]+)',
+    #             r'expires?[:\s]*([^.!?\n]+)',
+    #             r'until[:\s]*([^.!?\n]+)',
+    #             r'by[:\s]*([^.!?\n]+)'
+    #         ]
+            
+    #         for pattern in deadline_patterns:
+    #             matches = re.findall(pattern, page_text, re.IGNORECASE)
+    #             if matches:
+    #                 date_text = matches[0].strip()
+    #                 parsed_date = self.parse_date_string(date_text)
+    #                 if parsed_date:
+    #                     return parsed_date.isoformat()
+            
+    #         return None
+            
+    #     except:
+    #         return None
     def extract_end_date(self):
         """Extract application deadline/end date"""
         try:
             page_text = self.driver.find_element(By.TAG_NAME, "body").text
-            
-            # Look for deadline patterns
+
             deadline_patterns = [
                 r'deadline[:\s]*([^.!?\n]+)',
                 r'due date[:\s]*([^.!?\n]+)',
@@ -393,18 +447,16 @@ class ScholarshipSeleniumScraper:
                 r'until[:\s]*([^.!?\n]+)',
                 r'by[:\s]*([^.!?\n]+)'
             ]
-            
+
             for pattern in deadline_patterns:
                 matches = re.findall(pattern, page_text, re.IGNORECASE)
                 if matches:
                     date_text = matches[0].strip()
                     parsed_date = self.parse_date_string(date_text)
                     if parsed_date:
-                        return parsed_date.isoformat()
-            
+                        return parsed_date   # ← datetime object
             return None
-            
-        except:
+        except Exception:
             return None
 
     def extract_requirements(self):
@@ -1020,6 +1072,14 @@ class ScholarshipListScraper:
         return unique_scholarships
     
     def is_scholarship_link(self, href, text):
+
+        prefixes = [
+        "https://scholarsworld.ng/scholarships/",
+        "https://www.scholarshipregion.com/",]
+        for prefix in prefixes:
+            if href.startswith(prefix):
+                href = href[len(prefix):]
+                break
         """Determine if a link is likely a scholarship link"""
         # URL-based filtering
         url_keywords = ['scholarship', 'grant', 'award', 'fellowship', 'bursary', 'funding']
