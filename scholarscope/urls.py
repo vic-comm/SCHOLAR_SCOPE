@@ -20,11 +20,20 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from scholarships import views 
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/v1/auth/", include("dj_rest_auth.urls")),
+    #  path("api/v1/auth/", include("dj_rest_auth.urls")),
+    path('api/v1/auth/registration/', include('dj_rest_auth.registration.urls')),
     path('', include('scholarships.urls')),
-     path('accounts/signup/', views.CustomSignUpView.as_view(), name='account_signup'),
+    path('accounts/signup/', views.CustomSignUpView.as_view(), name='account_signup'),
     path('accounts/', include('allauth.urls')),
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    # Optional UI:
+    path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
 urlpatterns += static(settings.STATIC_URL, document=settings.STATIC_ROOT)

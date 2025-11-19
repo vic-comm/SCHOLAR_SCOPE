@@ -39,6 +39,9 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     'django.contrib.sites',
     'rest_framework',
+    'rest_framework.authtoken',
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
     'taggit',
     'allauth',
     'allauth.account',
@@ -51,6 +54,8 @@ INSTALLED_APPS = [
     'scholarships.apps.ScholarshipsConfig',
     'tailwind',
     'theme',
+    'drf_spectacular',
+    
      ]
 
 TAILWIND_APP_NAME='theme'
@@ -63,7 +68,36 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10,
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',),
+     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
 
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'ScholarScope API',
+    'DESCRIPTION': 'Scholarship apis ',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    # OTHER SETTINGS
+}
+from datetime import timedelta
+
+# djangorestframework-simplejwt
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+}
+
+# dj-rest-auth
+REST_AUTH = {
+    "USE_JWT": True,
+    "JWT_AUTH_COOKIE": "_auth",  # Name of access token cookie
+    "JWT_AUTH_REFRESH_COOKIE": "_refresh", # Name of refresh token cookie
+    "JWT_AUTH_HTTPONLY": False,  # Makes sure refresh token is sent
+}
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -101,23 +135,23 @@ WSGI_APPLICATION = "scholarscope.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.sqlite3",
-#         "NAME": BASE_DIR / "db.sqlite3",
-#     }
-# }
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
+}
 
 import dj_database_url
 # DATABASES['default'] = dj_database_url.parse(config('DATABASE_URL'))
 
-DATABASES = {
-    "default": dj_database_url.parse(
-        config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
-        conn_max_age=600,
-        ssl_require=True
-    )
-    }
+# DATABASES = {
+#     "default": dj_database_url.parse(
+#         config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
+#         conn_max_age=600,
+#         ssl_require=True
+#     )
+#     }
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -258,7 +292,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = f"SCHOLARSCOPE <{config('EMAIL_ADDRESS')}>"
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
-
+GOOGLE_OAUTH_CALLBACK_URL=config('GOOGLE_OAUTH_CALLBACK_URL')
 SITE_ID = 1
 
 CACHES = {
@@ -276,3 +310,12 @@ CACHES = {
 SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
 
 INTERNAL_IPS = ['127.0.0.1', 'localhost:8000']
+
+# settings.py
+
+DOWNLOAD_HANDLERS = {
+    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+}
+
+TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"

@@ -7,7 +7,7 @@ from django.conf import settings
 from scholarships.utils import random_string_generator
 from django.utils.text import slugify
 import hashlib
-
+from django.contrib.postgres.fields import ArrayField
 # Create your models here.
 class User(AbstractUser):
     applied_scholarships = models.ManyToManyField(
@@ -63,6 +63,7 @@ class Scholarship(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     fingerprint = models.CharField(max_length=1000, null=True, blank=True)
     slug = models.SlugField(null=True, blank=True, max_length=1000)
+    embedding = ArrayField(models.FloatField(), null=True, blank=True)
 
     def generate_unique_slug(self):
         base_slug = slugify(self.title)
@@ -137,7 +138,7 @@ class ScholarshipScrapeEvent(models.Model):
     error_message = models.CharField(blank=True, null=True)
     error_count = models.PositiveIntegerField(default=0)
     objects = ScholarshipScrapeEventManager()
-
+    # site_config = models.ForeignKey('SiteConfig', related_name='scrape_events', on_delete=models.SET_NULL)
 
     class Meta:
         ordering = ['-started_at']
@@ -210,9 +211,12 @@ class Profile(models.Model):
     profile_picture = models.ImageField(upload_to="profiles/", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    embedding = ArrayField(models.FloatField(), null=True, blank=True)
 
     def __str__(self):
         return f"{self.user.username}'s Profile"
+
+   
 
 class ScrapeFailureLog(models.Model):
     url = models.URLField()
@@ -222,3 +226,73 @@ class ScrapeFailureLog(models.Model):
 
     def __str__(self):
         return f"Failed scrape {self.url} at {self.created_at}"
+
+    
+
+
+class SiteConfig(models.Model):
+    name = models.CharField(max_length=100)
+    base_url = models.URLField()
+    list_url = models.URLField(help_text="The page containing scholarship listings")
+
+    # CSS selectors used by the spider
+    list_item_selector = models.CharField(max_length=255, help_text="Selector for each scholarship card")
+    title_selector = models.CharField(max_length=255)
+    link_selector = models.CharField(max_length=255)
+
+    # Optional detail selectors
+    description_selector = models.CharField(max_length=255, blank=True, null=True)
+    eligibility_selector = models.CharField(max_length=255, blank=True, null=True)
+    requirements_selector = models.CharField(max_length=255, blank=True, null=True)
+    deadline_selector = models.CharField(max_length=255, blank=True, null=True)
+    start_date_selector = models.CharField(max_length=255, blank=True, null=True)
+    reward_selector = models.CharField(max_length=255, blank=True, null=True)
+    level_selector = models.CharField(max_length=255, null=True, blank=True)
+    tag_selector = models.CharField(max_length=255, null=True, blank=True)
+
+    active = models.BooleanField(default=True)
+    last_successful = models.DateTimeField(blank=True, null=True)
+    last_error = models.TextField(blank=True, null=True)
+    last_scraped = models.DateTimeField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def mark_success(self):
+        self.last_successful = timezone.now()
+        self.last_error = None
+        self.save(update_fields=["last_successful", "last_error"])
+
+    def mark_failure(self, error_msg):
+        self.last_error = error_msg
+        self.save(update_fields=["last_error"])
+
+    def __str__(self):
+        return self.name
+
+
+# class WatchedScholarship(models.Model):
+#     user = models.ForeignKey(User, on_delete=models.CASCADE)
+#     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     notified_for_year = models.DateTimeField(null=True, blank=True)
+#     notified = models.BooleanField(default=False)
+#     class Meta:
+#         unique_together = ("user", "scholarship")  # prevent duplicate watches
+
+#     def __str__(self):
+#         return f"{self.user} watching {self.scholarship.title}"
+
+# class ScholarshipCycle(models.Model):
+#     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name="cycles")
+#     deadline = models.DateField(null=True)
+#     start_date = models.DateField(null=True)
+#     batch_year = models.IntegerField(db_index=True)
+#     status = models.CharField(max_length=20, default="active")
+#     scraped_at = models.DateTimeField(auto_now_add=True)
+
+# class ScholarshipRenewalLog(models.Model):
+#     old_scholarship = models.ForeignKey("Scholarship", on_delete=models.SET_NULL, null=True, related_name="old_versions")
+#     new_scholarship = models.ForeignKey("Scholarship", on_delete=models.SET_NULL, null=True, related_name="new_versions")
+#     detected_at = models.DateTimeField(auto_now_add=True)
+#     diff_summary = models.JSONField(default=dict)
