@@ -1,0 +1,16 @@
+Hello {{ user_name }},
+
+Here are your pending scholarship applications:
+
+{% for s in scholarships %}
+- {{ s.title }}
+  Deadline: {{ s.deadline_date }} ({{ s.days_remaining }} days left)
+  Award: {{ s.award_amount }}
+  Applied on: {{ s.application_date }}
+
+{% endfor %}
+
+Check your application status here: {{ dashboard_url }}
+
+Best regards,
+The Scholarship Team

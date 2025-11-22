@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Profile Information{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header Section -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-white mb-4 tracking-tight">
+                Profile Information
+            </h1>
+            <p class="text-gray-300 text-lg">
+                Complete your profile to unlock personalized scholarship recommendations
+            </p>
+            <div class="w-24 h-1 bg-gradient-to-r from-blue-500 to-purple-600 mx-auto mt-6 rounded-full"></div>
+        </div>
+
+        <!-- Form Container -->
+        <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden">
+            <form method="post" enctype="multipart/form-data" class="p-8 space-y-8">
+                {% csrf_token %}
+                
+                <!-- Personal Information Section -->
+                <div class="space-y-6">
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                        </div>
+                        <h2 class="text-2xl font-semibold text-white">Personal Information</h2>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Profile Picture -->
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-300 mb-2">
+                                Profile Picture
+                            </label>
+                            <div class="relative group">
+                                <div class="w-32 h-32 mx-auto bg-slate-700 rounded-full flex items-center justify-center border-2 border-dashed border-slate-600 group-hover:border-blue-500 transition-colors duration-300">
+                                    <svg class="w-8 h-8 text-gray-400 group-hover:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                    </svg>
+                                </div>
+                                {{ form.profile_picture }}
+                            </div>
+                            {% if form.profile_picture.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.profile_picture.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Full Name -->
+                        <div>
+                            <label for="{{ form.full_name.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                Full Name
+                            </label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                </div>
+                                <input type="text" name="{{ form.full_name.name }}" id="{{ form.full_name.id_for_label }}" value="{{ form.full_name.value|default:'' }}" class="w-full pl-12 pr-4 py-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70" placeholder="Enter your full name">
+                            </div>
+                            {% if form.full_name.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.full_name.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Date of Birth -->
+                        <div>
+                            <label for="{{ form.date_of_birth.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                Date of Birth
+                            </label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                <input type="date" name="{{ form.date_of_birth.name }}" id="{{ form.date_of_birth.id_for_label }}" value="{{ form.date_of_birth.value|default:'' }}" class="w-full pl-12 pr-4 py-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70">
+                            </div>
+                            {% if form.date_of_birth.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.date_of_birth.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Country -->
+                        <div>
+                            <label for="{{ form.country.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                Country
+                            </label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    </svg>
+                                </div>
+                                <input type="text" name="{{ form.country.name }}" id="{{ form.country.id_for_label }}" value="{{ form.country.value|default:'' }}" class="w-full pl-12 pr-4 py-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70" placeholder="Enter your country">
+                            </div>
+                            {% if form.country.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.country.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- City -->
+                        <div>
+                            <label for="{{ form.city.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                City
+                            </label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                    </svg>
+                                </div>
+                                <input type="text" name="{{ form.city.name }}" id="{{ form.city.id_for_label }}" value="{{ form.city.value|default:'' }}" class="w-full pl-12 pr-4 py-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70" placeholder="Enter your city">
+                            </div>
+                            {% if form.city.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.city.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Academic Information Section -->
+                <div class="space-y-6 pt-8 border-t border-slate-700">
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path>
+                            </svg>
+                        </div>
+                        <h2 class="text-2xl font-semibold text-white">Academic Information</h2>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Field of Study -->
+                        <div>
+                            <label for="{{ form.field_of_study.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                Field of Study
+                            </label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                    </svg>
+                                </div>
+                                <input type="text" name="{{ form.field_of_study.name }}" id="{{ form.field_of_study.id_for_label }}" value="{{ form.field_of_study.value|default:'' }}" class="w-full pl-12 pr-4 py-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70" placeholder="e.g., Computer Science, Medicine">
+                            </div>
+                            {% if form.field_of_study.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.field_of_study.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Institution -->
+                        <div>
+                            <label for="{{ form.institution.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                Institution
+                            </label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path>
+                                    </svg>
+                                </div>
+                                <input type="text" name="{{ form.institution.name }}" id="{{ form.institution.id_for_label }}" value="{{ form.institution.value|default:'' }}" class="w-full pl-12 pr-4 py-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70" placeholder="e.g., Harvard University">
+                            </div>
+                            {% if form.institution.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.institution.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Graduation Year -->
+                        <div>
+                            <label for="{{ form.graduation_year.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                Graduation Year
+                            </label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                <input type="number" name="{{ form.graduation_year.name }}" id="{{ form.graduation_year.id_for_label }}" value="{{ form.graduation_year.value|default:'' }}" class="w-full pl-12 pr-4 py-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70" placeholder="e.g., 2024" min="1900" max="2050">
+                            </div>
+                            {% if form.graduation_year.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.graduation_year.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Level -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-3">
+                                Academic Level
+                            </label>
+                            <div class="space-y-3 max-h-40 overflow-y-auto bg-slate-700/30 rounded-lg p-4 border border-slate-600">
+                                {% for choice in form.level %}
+                                    <label class="flex items-center space-x-3 cursor-pointer hover:bg-slate-700/50 rounded-lg p-2 transition-colors duration-200">
+                                        {{ choice.tag }}
+                                        <span class="text-gray-300 text-sm">{{ choice.choice_label }}</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                            {% if form.level.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.level.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Tags -->
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-300 mb-3">
+                                Interest Tags
+                            </label>
+                            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-48 overflow-y-auto bg-slate-700/30 rounded-lg p-4 border border-slate-600">
+                                {% for choice in form.tags %}
+                                    <label class="flex items-center space-x-3 cursor-pointer hover:bg-slate-700/50 rounded-lg p-2 transition-colors duration-200">
+                                        {{ choice.tag }}
+                                        <span class="text-gray-300 text-sm">{{ choice.choice_label }}</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                            {% if form.tags.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.tags.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scholarship Preferences Section -->
+                <div class="space-y-6 pt-8 border-t border-slate-700">
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <h2 class="text-2xl font-semibold text-white">Scholarship Preferences</h2>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-6">
+                        <!-- Preferred Countries -->
+                        <div>
+                            <label for="{{ form.preferred_countries.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                Preferred Countries
+                            </label>
+                            <p class="text-xs text-gray-400 mb-3">Countries where you prefer to study</p>
+                            <div class="relative group">
+                                <div class="absolute top-4 left-4 pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <textarea name="{{ form.preferred_countries.name }}" id="{{ form.preferred_countries.id_for_label }}" rows="4" class="w-full pt-4 pb-4 pl-12 pr-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70 resize-y" placeholder="e.g., United States, Canada, United Kingdom, Germany...">{{ form.preferred_countries.value|default:'' }}</textarea>
+                            </div>
+                            {% if form.preferred_countries.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.preferred_countries.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Preferred Scholarship Types -->
+                        <div>
+                            <label for="{{ form.preferred_scholarship_types.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                Preferred Scholarship Types
+                            </label>
+                            <p class="text-xs text-gray-400 mb-3">Merit-based, Need-based, Research, etc.</p>
+                            <div class="relative group">
+                                <div class="absolute top-4 left-4 pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <textarea name="{{ form.preferred_scholarship_types.name }}" id="{{ form.preferred_scholarship_types.id_for_label }}" rows="4" class="w-full pt-4 pb-4 pl-12 pr-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70 resize-y" placeholder="e.g., Merit-based, Need-based, Research scholarships, Athletic scholarships...">{{ form.preferred_scholarship_types.value|default:'' }}</textarea>
+                            </div>
+                            {% if form.preferred_scholarship_types.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.preferred_scholarship_types.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Bio -->
+                        <div>
+                            <label for="{{ form.bio.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-3">
+                                Biography
+                            </label>
+                            <p class="text-xs text-gray-400 mb-3">Tell us about yourself, your goals, and achievements</p>
+                            <div class="relative group">
+                                <div class="absolute top-4 left-4 pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                                    </svg>
+                                </div>
+                                <textarea name="{{ form.bio.name }}" id="{{ form.bio.id_for_label }}" rows="6" class="w-full pt-4 pb-4 pl-12 pr-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-slate-700 transition-all duration-300 hover:bg-slate-700/70 resize-y" placeholder="Share your story, academic achievements, career goals, and what makes you unique...">{{ form.bio.value|default:'' }}</textarea>
+                            </div>
+                            {% if form.bio.errors %}
+                                <div class="mt-2 text-red-400 text-sm">
+                                    {{ form.bio.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="pt-8 border-t border-slate-700">
+                    <div class="flex justify-end space-x-4">
+                        <a href="{% url 'update_profile' %}" class="px-6 py-3 border border-slate-600 text-gray-300 rounded-xl hover:bg-slate-700 hover:border-slate-500 transition-all duration-300 font-medium">
+                            Cancel
+                        </a>
+                        <button type="submit" class="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl">
+                            Save Profile
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Custom form field styling */
+input[type="text"], 
+input[type="email"], 
+input[type="date"], 
+input[type="number"], 
+textarea, 
+select {
+    @apply w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300;
+}
+
+input[type="text"]:focus, 
+input[type="email"]:focus, 
+input[type="date"]:focus, 
+input[type="number"]:focus, 
+textarea:focus, 
+select:focus {
+    @apply bg-slate-700 shadow-lg;
+}
+
+/* Multi-select styling */
+select[multiple] {
+    @apply min-h-32;
+}
+
+/* Checkbox styling */
+input[type="checkbox"] {
+    @apply w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500 focus:ring-2 transition-all duration-200;
+}
+
+input[type="checkbox"]:checked {
+    @apply bg-blue-600 border-blue-600;
+}
+
+/* Custom scrollbar for checkbox containers */
+.max-h-40::-webkit-scrollbar,
+.max-h-48::-webkit-scrollbar {
+    @apply w-2;
+}
+
+.max-h-40::-webkit-scrollbar-track,
+.max-h-48::-webkit-scrollbar-track {
+    @apply bg-slate-800 rounded-full;
+}
+
+.max-h-40::-webkit-scrollbar-thumb,
+.max-h-48::-webkit-scrollbar-thumb {
+    @apply bg-slate-600 rounded-full hover:bg-slate-500;
+}
+
+/* File input styling */
+input[type="file"] {
+    @apply absolute inset-0 w-full h-full opacity-0 cursor-pointer;
+}
+
+/* Textarea specific styling */
+/* Removed since we're using custom textarea styling */
+
+/* Icon positioning for inputs with icons removed since we're using custom positioning */
+
+/* Hover effects */
+.group:hover input[type="file"] {
+    @apply opacity-100;
+}
+
+/* Animation for gradient border */
+@keyframes gradient {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient 3s ease infinite;
+}
+</style>
+{% endblock %}

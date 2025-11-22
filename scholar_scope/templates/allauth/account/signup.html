@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% load widget_tweaks %}
+{% load allauth account %}
+{% block content %}
+<div class="min-h-screen bg-gray-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+    <div class="w-full max-w-md space-y-6">
+        <!-- Header -->
+        <h1 class="text-3xl font-light text-white text-center mb-2 animate-slide-down">
+            {% trans "Sign Up" %}
+        </h1>
+
+        <p class="text-gray-400 text-center mb-6 animate-slide-down delay-100">
+            {% trans "Already have an account?" %}
+            <a href="{{ login_url }}" class="text-blue-400 hover:text-blue-300 underline">
+                {% trans "Sign in" %}
+            </a>
+        </p>
+
+        {% if not SOCIALACCOUNT_ONLY %}
+        <form method="post" action="{% url 'account_signup' %}" class="bg-gray-800 p-6 rounded-lg shadow-lg space-y-4 animate-slide-up delay-200">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="text-red-400 text-sm mb-2">
+                    {{ form.non_field_errors | safe }}
+                </div>
+            {% endif %}
+
+            <div class="space-y-4">
+                <div>
+                    <label for="{{ form.username.id_for_label }}" class="block text-gray-300 text-sm mb-1">
+                        {% trans "Username" %}
+                    </label>
+                    {% render_field form.username class="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your username" %}
+                    {% if form.username.errors %}
+                        <p class="text-red-400 text-sm mt-1">{{ form.username.errors | safe }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.email.id_for_label }}" class="block text-gray-300 text-sm mb-1">
+                        {% trans "Email" %}
+                    </label>
+                    {% render_field form.email class="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your email" %}
+                    {% if form.email.errors %}
+                        <p class="text-red-400 text-sm mt-1">{{ form.email.errors | safe }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.password1.id_for_label }}" class="block text-gray-300 text-sm mb-1">
+                        {% trans "Password" %}
+                    </label>
+                    {% render_field form.password1 class="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your password" %}
+                    {% if form.password1.errors %}
+                        <p class="text-red-400 text-sm mt-1">{{ form.password1.errors | safe }}</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.password2.id_for_label }}" class="block text-gray-300 text-sm mb-1">
+                        {% trans "Confirm Password" %}
+                    </label>
+                    {% render_field form.password2 class="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Confirm your password" %}
+                    {% if form.password2.errors %}
+                        <p class="text-red-400 text-sm mt-1">{{ form.password2.errors | safe }}</p>
+                    {% endif %}
+                </div>
+
+                {{ redirect_field }}
+            </div>
+
+            <button type="submit" class="w-full py-3 mt-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all">
+                {% trans "Sign Up" %}
+            </button>
+        </form>
+        {% endif %}
+
+        <!-- Optional social / passkey signups -->
+        {% if PASSKEY_SIGNUP_ENABLED or SOCIALACCOUNT_ENABLED %}
+        <div class="my-6 border-t border-gray-600"></div>
+        <div class="space-y-3">
+            {% if PASSKEY_SIGNUP_ENABLED %}
+            <a href="{{ signup_by_passkey_url }}" class="block w-full py-3 px-4 text-center bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition">
+                {% trans "Sign up using a passkey" %}
+            </a>
+            {% endif %}
+
+            {% if SOCIALACCOUNT_ENABLED %}
+            {% include "socialaccount/snippets/login.html" with page_layout="entrance" %}
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+@keyframes slide-down {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-down { animation: slide-down 0.5s ease-out both; }
+.animate-slide-up { animation: slide-up 0.5s ease-out both; }
+.delay-100 { animation-delay: 0.1s; animation-fill-mode: both; }
+.delay-200 { animation-delay: 0.2s; animation-fill-mode: both; }
+</style>
+{% endblock content %}
