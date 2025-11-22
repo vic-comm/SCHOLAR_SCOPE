@@ -1,0 +1,391 @@
+{% load static tailwind_tags %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>ScholarScope - Your Gateway to Educational Opportunities</title>
+    <meta name="description" content="Discover and apply for scholarships tailored to your academic journey. Find undergraduate and graduate funding opportunities." />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#6366f1" />
+    {% comment %} {% tailwind_css %} {% endcomment %}
+    {% comment %} {% load static %}
+  <link rel="stylesheet" href="{% static 'css/dist/styles.css' %}"> {% endcomment %}
+    <!-- Tailwind CSS + DaisyUI CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            animation: {
+              'gradient': 'gradient 8s ease infinite',
+              'float': 'float 6s ease-in-out infinite',
+              'glow': 'glow 2s ease-in-out infinite alternate',
+            },
+            keyframes: {
+              gradient: {
+                '0%, 100%': {
+                  'background-size': '200% 200%',
+                  'background-position': 'left center'
+                },
+                '50%': {
+                  'background-size': '200% 200%',
+                  'background-position': 'right center'
+                },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0px)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+              glow: {
+                'from': { boxShadow: '0 0 20px rgba(99, 102, 241, 0.5)' },
+                'to': { boxShadow: '0 0 30px rgba(99, 102, 241, 0.8)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" integrity="sha384-Akqfrbj/HpNVo8k11SXBb6TlBWmXXlYQrCSqEWmyKJe+hDm3Z/B2WVG4smwBkRVm" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.js"></script>
+    
+    <style>
+      /* Custom gradient background */
+      .bg-gradient-animated {
+        background: linear-gradient(-45deg, #0f0f23, #1a1a2e, #16213e, #0f3460);
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
+      }
+      
+      /* Glassmorphism effect */
+      .glass-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: rgba(99, 102, 241, 0.6);
+        border-radius: 4px;
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(99, 102, 241, 0.8);
+      }
+    </style>
+  </head>
+  
+  <body class="bg-gradient-animated text-white min-h-screen overflow-x-hidden">
+    <!-- Floating particles background -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+      <div class="absolute -top-4 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-float"></div>
+      <div class="absolute -top-4 -right-4 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-float" style="animation-delay: 2s;"></div>
+      <div class="absolute -bottom-8 left-20 w-72 h-72 bg-indigo-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-float" style="animation-delay: 4s;"></div>
+    </div>
+{% comment %} <header class="relative z-10 glass-card border-0 border-b border-white/20 sticky top-0 backdrop-blur-lg">
+  <div class="container mx-auto flex flex-wrap p-4 lg:p-6 flex-col lg:flex-row items-center justify-between">
+    <!-- Logo -->
+    <a href="{% url 'scholarship_list' %}" 
+       class="flex title-font font-bold items-center text-white mb-4 lg:mb-0 group transition-all duration-300 hover:scale-105">
+      <div class="relative">
+        <svg xmlns="http://www.w3.org/2000/svg"
+             fill="none"
+             stroke="currentColor"
+             stroke-linecap="round"
+             stroke-linejoin="round"
+             stroke-width="2"
+             class="w-12 h-12 text-white p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg transition-all duration-300 group-hover:shadow-xl group-hover:animate-glow"
+             viewBox="0 0 24 24">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+        </svg>
+        <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full animate-pulse"></div>
+      </div>
+      <span class="ml-4 text-2xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+        ScholarScope
+      </span>
+    </a>
+
+    <!-- Search Form -->
+    <form method="GET" action="{% url 'scholarship_list' %}" class="relative group mb-4 lg:mb-0">
+      <div class="relative">
+        <input
+          type="text"
+          name="q"
+          placeholder="Discover your perfect scholarship..."
+          value="{{ search_query }}"
+          class="input w-full max-w-sm lg:w-80 xl:w-96 pl-12 pr-4 py-3 text-white placeholder-gray-400 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 hover:bg-white/15"
+          aria-label="Search scholarships"
+        />
+        <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 transition-colors group-focus-within:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+      </div>
+      <button
+    type="submit"
+    class="absolute right-2 top-1/2 -translate-y-1/2 
+           flex items-center justify-center 
+           w-9 h-9 rounded-lg 
+           bg-gradient-to-r from-indigo-500 to-purple-600 
+           text-white shadow-md hover:from-indigo-600 hover:to-purple-700 
+           transition-all duration-300 hover:scale-105"
+  >
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+    </svg>
+  </button>
+    </form>
+
+    
+
+    <!-- Navigation + User Menu -->
+    <div class="flex items-center gap-6">
+      <nav class="hidden md:flex gap-6">
+        <a href="{% url 'scholarship_list' %}?level=undergraduate"
+        hx-get="{% url 'scholarship_list' %}?level=undergraduate"
+        hx-target='#scholarship-results'
+        hx-swap='innerHTML'
+        class="relative group px-4 py-2 rounded-lg transition-all duration-300 hover:bg-white/10">
+          <span class="text-white group-hover:text-indigo-300 transition-colors duration-300">Undergraduate</span>
+          <div class="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 group-hover:w-full transition-all duration-300"></div>
+        </a>
+        <a href="{% url 'scholarship_list' %}?level=postgraduate" 
+          hx-get="{% url 'scholarship_list' %}?level=postgraduate" 
+          hx-target='#scholarship-results'
+          hx-swap='innerHTML'
+          class="relative group px-4 py-2 rounded-lg transition-all duration-300 hover:bg-white/10">
+          <span class="text-white group-hover:text-indigo-300 transition-colors duration-300">Graduate</span>
+          <div class="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 group-hover:w-full transition-all duration-300"></div>
+        </a>
+      </nav>
+
+      <!-- Dashboard Button -->
+      <a href="{% url 'dashboard' %}"
+         class="inline-flex items-center px-5 py-2 text-sm font-semibold rounded-xl shadow-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 hover:scale-105">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h18M3 6h18M3 18h18"></path>
+        </svg>
+        Dashboard
+      </a>
+
+      <!-- Mobile menu button -->
+      <button class="md:hidden btn btn-ghost btn-circle text-white hover:bg-white/10">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+      </button>
+
+      <!-- User Avatar Dropdown -->
+      <div class="dropdown dropdown-end">
+        <div
+          tabindex="0"
+          role="button"
+          class="btn btn-ghost btn-circle avatar group hover:scale-105 transition-all duration-300"
+          onclick="toggleDropdown(event)"
+        >
+          <div class="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+            <span class="text-sm font-bold">
+              {% if request.user.username %}
+                {{ request.user.username|slice:":2"|upper }}
+              {% else %}
+                U
+              {% endif %}
+            </span>
+          </div>
+        </div>
+        <!-- Dropdown Menu -->
+          <div class="divider my-2 opacity-30"></div>
+          <li>
+            <form method="post" action="{% url 'account_logout' %}">
+              {% csrf_token %}
+              <button type="submit"
+                      class="flex items-center gap-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all duration-300 hover:text-red-300">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                  </svg>
+                  Logout
+              </button>
+            </form>
+          </li>
+      </div>
+    </div>
+  </div>
+</header> {% endcomment %}
+<header class="relative z-10 glass-card border-0 border-b border-white/20 sticky top-0 backdrop-blur-lg">
+  <div class="container mx-auto flex flex-wrap p-4 lg:p-6 flex-col lg:flex-row items-center justify-between">
+
+    <!-- Logo -->
+    <a href="{% url 'scholarship_list' %}" 
+       class="flex title-font font-bold items-center text-white mb-4 lg:mb-0 group transition-all duration-300 hover:scale-105">
+      <div class="relative">
+        <svg xmlns="http://www.w3.org/2000/svg"
+             fill="none"
+             stroke="currentColor"
+             stroke-linecap="round"
+             stroke-linejoin="round"
+             stroke-width="2"
+             class="w-12 h-12 text-white p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg transition-all duration-300 group-hover:shadow-xl group-hover:animate-glow"
+             viewBox="0 0 24 24">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+        </svg>
+        <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full animate-pulse"></div>
+      </div>
+      <span class="ml-4 text-2xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+        ScholarScope
+      </span>
+    </a>
+
+    <!-- Search Form -->
+    <form method="GET" action="{% url 'scholarship_list' %}" class="relative group mb-4 lg:mb-0 flex-1 max-w-xl">
+      <div class="relative">
+        <input
+          type="text"
+          name="q"
+          placeholder="Discover your perfect scholarship..."
+          value="{{ search_query }}"
+          class="input w-full pl-12 pr-12 py-3 text-white placeholder-gray-400 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 hover:bg-white/15"
+          aria-label="Search scholarships"
+        />
+        <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 transition-colors group-focus-within:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+        <button
+          type="submit"
+          class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 hover:scale-105"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+        </button>
+      </div>
+    </form>
+
+    <!-- Navigation + User Menu -->
+    <div class="flex items-center gap-4">
+
+      <!-- Graduate/Undergraduate Buttons (hidden on mobile) -->
+      <nav class="hidden md:flex gap-6">
+        <a href="{% url 'scholarship_list' %}?level=undergraduate"
+           hx-get="{% url 'scholarship_list' %}?level=undergraduate"
+           hx-target='#scholarship-results'
+           hx-swap='innerHTML'
+           class="relative group px-4 py-2 rounded-lg transition-all duration-300 hover:bg-white/10">
+          <span class="text-white group-hover:text-indigo-300 transition-colors duration-300">Undergraduate</span>
+          <div class="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 group-hover:w-full transition-all duration-300"></div>
+        </a>
+        <a href="{% url 'scholarship_list' %}?level=postgraduate" 
+           hx-get="{% url 'scholarship_list' %}?level=postgraduate" 
+           hx-target='#scholarship-results'
+           hx-swap='innerHTML'
+           class="relative group px-4 py-2 rounded-lg transition-all duration-300 hover:bg-white/10">
+          <span class="text-white group-hover:text-indigo-300 transition-colors duration-300">Graduate</span>
+          <div class="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 group-hover:w-full transition-all duration-300"></div>
+        </a>
+      </nav>
+
+      <!-- Dashboard Button -->
+      <a href="{% url 'dashboard' %}"
+         class="inline-flex items-center px-5 py-2 text-sm font-semibold rounded-xl shadow-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 hover:scale-105">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h18M3 6h18M3 18h18"></path>
+        </svg>
+        Dashboard
+      </a>
+
+      <!-- Logout Button -->
+      <form method="post" action="{% url 'account_logout' %}">
+        {% csrf_token %}
+        <button type="submit"
+                class="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-xl shadow-lg bg-red-600 text-white hover:bg-red-700 transition-all duration-300 hover:scale-105">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+          </svg>
+          Logout
+        </button>
+      </form>
+
+      <!-- Mobile menu button -->
+      <button class="md:hidden btn btn-ghost btn-circle text-white hover:bg-white/10">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+      </button>
+
+    </div>
+  </div>
+</header>
+
+
+
+    <!-- Main Content -->
+    <main class="relative z-10 container mx-auto px-4 py-8 lg:py-12">
+      {% block content %}
+      <!-- Demo content to showcase the design -->
+      
+      <!-- Feature cards -->
+      {% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 glass-card border-0 border-t border-white/20 mt-auto">
+      <div class="container mx-auto px-4 py-8">
+        <div class="text-center text-gray-400">
+          <p>&copy; 2025 ScholarScope. Empowering students to achieve their dreams.</p>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      // Add smooth scrolling and enhanced interactions
+      document.addEventListener('DOMContentLoaded', function() {
+        // Add hover effects to cards
+        const cards = document.querySelectorAll('.glass-card');
+        cards.forEach(card => {
+          card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-5px) scale(1.02)';
+          });
+          card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0) scale(1)';
+          });
+        });
+
+        // Enhanced search input focus effect
+        const searchInput = document.querySelector('input[name="q"]');
+        if (searchInput) {
+          searchInput.addEventListener('focus', function() {
+            this.parentElement.style.boxShadow = '0 0 30px rgba(99, 102, 241, 0.3)';
+          });
+          searchInput.addEventListener('blur', function() {
+            this.parentElement.style.boxShadow = 'none';
+          });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(event) {
+          const dropdown = document.getElementById('userDropdown');
+          const avatar = event.target.closest('.avatar');
+          
+          if (!avatar && dropdown && !dropdown.classList.contains('hidden')) {
+            dropdown.classList.add('hidden');
+          }
+        });
+      });
+
+      // Toggle dropdown function
+      function toggleDropdown(event) {
+        event.stopPropagation();
+        const dropdown = document.getElementById('userDropdown');
+        dropdown.classList.toggle('hidden');
+      }
+    </script>
+  </body>
+</html>

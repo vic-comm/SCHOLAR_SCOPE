@@ -1,0 +1,25 @@
+/* index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Correct way to apply global styles with Tailwind */
+@layer base {
+  body {
+    @apply font-display bg-background-light dark:bg-background-dark min-h-screen;
+  }
+}
+
+/* Remove or override the conflicting default styles below */
+@layer base {
+  :root {
+    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  }
+}
+
+/* Optional: clean up conflicting defaults */
+@layer base {
+  body {
+    margin: 0;
+  }
+}
