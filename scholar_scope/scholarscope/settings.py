@@ -256,10 +256,6 @@ SOCIALACCOUNT_ADAPTER="scholarscope.adapters.MySocialAccountAdapter"
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
-
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=True
-
 CELERY_BEAT_SCHEDULER='django_celery_beat.schedulers.DatabaseScheduler'
 SOCIALACCOUNT_AUTO_SIGNUP = True
 LOGIN_REDIRECT_URL = 'scholarship_list'
@@ -317,11 +313,3 @@ SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
 
 INTERNAL_IPS = ['127.0.0.1', 'localhost:8000']
 
-# settings.py
-
-DOWNLOAD_HANDLERS = {
-    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-}
-
-TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"

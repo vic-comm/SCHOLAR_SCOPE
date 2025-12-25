@@ -34,7 +34,7 @@ def scholarship_post_save_invalidate(sender, instance, created, **kwargs):
 
     # --- Strategy A: selective invalidation ---
     tag_ids = list(instance.tags.values_list("id", flat=True)) if hasattr(instance, "tags") else []
-    level_ids = list(instance.levels.values_list("id", flat=True)) if hasattr(instance, "levels") else []
+    level_ids = list(instance.level.values_list("id", flat=True)) if hasattr(instance, "levels") else []
 
     if not tag_ids and not level_ids:
         return  # nothing to match on

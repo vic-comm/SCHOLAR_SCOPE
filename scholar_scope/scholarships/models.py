@@ -64,6 +64,7 @@ class Scholarship(models.Model):
     fingerprint = models.CharField(max_length=1000, null=True, blank=True)
     slug = models.SlugField(null=True, blank=True, max_length=1000)
     embedding = ArrayField(models.FloatField(), null=True, blank=True)
+    scraped_at = models.DateTimeField(null=True, blank=True)
 
     def generate_unique_slug(self):
         base_slug = slugify(self.title)
@@ -108,7 +109,14 @@ class Scholarship(models.Model):
     
     def get_absolute_url(self):
         return reverse("scholarship_detail", kwargs={"pk": self.pk})
-    
+
+class FailedScholarship(models.Model):
+    scrape_event = models.ForeignKey('ScholarshipScrapeEvent',on_delete=models.CASCADE,related_name='failed_items')
+    url = models.URLField(max_length=1000)
+    reason = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    retries = models.IntegerField(default=0)
+
 
 class ScholarshipScrapeEventManager(models.Manager):
     def create_scrape_event(self, source_name, source_url=None):
@@ -158,6 +166,14 @@ class ScholarshipScrapeEvent(models.Model):
         self.completed_at = timezone.now()
         self.duration = self.completed_at - self.started_at
         self.save()
+    
+    def mark_partial(self, message="Some scholarships failed"):
+        self.status = 'COMPLETED'  # still completed, but with warnings
+        self.error_message = message
+        self.completed_at = timezone.now()
+        self.duration = self.completed_at - self.started_at
+        self.save()
+
     
     def increment_error_count(self):
         self.error_count += 1

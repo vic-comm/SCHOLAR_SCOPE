@@ -21,13 +21,19 @@ NEWSPIDER_MODULE = "scholarscope_scrapers.spiders"
 ROBOTSTXT_OBEY = False
 DOWNLOAD_DELAY = 1.5
 
-# DOWNLOADER_MIDDLEWARES = {
-#     "scrapy_playwright.middleware.PlaywrightMiddleware": 800,
-# }
-
 DOWNLOADER_MIDDLEWARES = {
-    "scrapy_playwright.middleware.PlaywrightMiddleware": 543,
+    "scrapy_playwright.middleware.PlaywrightMiddleware": 800,
 }
+
+# DOWNLOADER_MIDDLEWARES = {
+#     "scrapy_playwright.middleware.PlaywrightMiddleware": 543,
+# }
+# TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
+DOWNLOAD_HANDLERS = {
+    "http":  "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+}
+
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 ITEM_PIPELINES = {
     'scholarscope_scrapers.pipelines.ScholarshipPipeline': 300,

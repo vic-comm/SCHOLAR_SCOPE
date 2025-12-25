@@ -18,7 +18,7 @@ from scholarships.models import (
     ScholarshipScrapeEvent,
 )
 from scholarships.utils import generate_fingerprint
-
+from asgiref.sync import sync_to_async
 logger = logging.getLogger(__name__)
 
 BULK_BATCH_SIZE = 100
@@ -28,7 +28,7 @@ GLOBAL_FUZZ_LIMIT = 500
 
 class ScholarshipPipeline:
 
-    def open_spider(self, spider):
+    async def open_spider(self, spider):
         self.scraped_items = []
         source_name = getattr(spider, "source_name", spider.name)
         source_url = getattr(spider, "list_url", None)
@@ -36,13 +36,13 @@ class ScholarshipPipeline:
         
         if getattr(spider, "scrape_event_id", None):
             # ✅ reuse existing event
-            self.scrape_event = ScholarshipScrapeEvent.objects.get(id=spider.scrape_event_id)
-            self.scrape_event.mark_retried()
+            self.scrape_event = await sync_to_async(ScholarshipScrapeEvent.objects.get)(id=spider.scrape_event_id)
+            await sync_to_async(self.scrape_event.mark_retried)()
         else:
             # ✅ create new event
             source_name = getattr(spider, "source_name", spider.name)
             source_url = getattr(spider, "list_url", None)
-            self.scrape_event = ScholarshipScrapeEvent.objects.create_scrape_event(
+            self.scrape_event = await sync_to_async(ScholarshipScrapeEvent.objects.create_scrape_event)(
                 source_name=source_name,
                 source_url=source_url,
             )
@@ -72,23 +72,24 @@ class ScholarshipPipeline:
         self.scraped_items.append(item)
         return item
 
-    def close_spider(self, spider):
+    async def close_spider(self, spider):
         if not self.scraped_items:
             logger.warning(f"No scholarships scraped for {spider.name}")
-            self.scrape_event.mark_completed()
+            await sync_to_async(self.scrape_event.mark_completed)()
             return
 
         try:
-            created_count = bulk_create(
+            created_count = await sync_to_async(bulk_create)(
                 {entry["title"]: entry for entry in self.scraped_items},
                 source_name=spider.name,
                 source_url=getattr(spider, "list_url", None),
                 scrape_event=self.scrape_event
             )
+            await sync_to_async(self.scrape_event.mark_completed)()
             logger.info(f"✅ {created_count} scholarships saved for {spider.name}")
         except Exception as e:
             logger.error(f"Failed to save scholarships: {e}")
-            self.scrape_event.mark_failed(str(e))
+            await sync_to_async(self.scrape_event.mark_failed)(str(e))
 
 
 

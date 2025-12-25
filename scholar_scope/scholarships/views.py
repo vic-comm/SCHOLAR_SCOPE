@@ -89,7 +89,7 @@ class ScholarshipViewset(viewsets.ModelViewSet):
                 Q(tags__name__icontains=query)
             ).distinct().order_by('-created_at')
         if level:
-            scholarships = Scholarship.objects.filter(level__level__iexact=level)
+            scholarships = Scholarship.filter(level__level__iexact=level)
         if tag:
             scholarships = Scholarship.objects.filter(tag__name__iexact=tag)
         return scholarships.order_by('-created_at')

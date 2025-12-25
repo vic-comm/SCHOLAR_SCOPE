@@ -1,5 +1,5 @@
 from celery import shared_task
-from .models import Scholarship, ScholarshipScrapeEvent, Level, Tag, SiteConfig, Profile
+from .models import Scholarship, ScholarshipScrapeEvent, Level, Tag, SiteConfig, Profile, FailedScholarship
 from django.utils import timezone
 from django.utils.text import slugify
 from scholarships.services import ScholarshipEmailService
@@ -8,7 +8,6 @@ from django.core.cache import cache
 from datetime import datetime, timedelta
 from django.db import transaction
 from scholarships.utils import generate_fingerprint, get_text_embedding, _rec_cache_key
-from celery import shared_task
 import os
 os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'scholarscope_scrapers.settings')
 import importlib
@@ -171,43 +170,43 @@ def outdated_scholarships():
 
 
 
-@shared_task
-def scrape_all_sources():
-    sources = SiteConfig.objects.filter(active=True)
+# @shared_task
+# def scrape_all_sources():
+#     sources = SiteConfig.objects.filter(active=True)
 
-    for site in sources:
-        scrape_site.delay(
-            site_config_id=site.id,
-        )
+#     for site in sources:
+#         scrape_site.delay(
+#             site_config_id=site.id,
+#         )
 
     
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def scrape_site(self, site_config_id, scrape_event_id=None):
-    from scrapy.crawler import CrawlerProcess
-    try:
-        site = SiteConfig.objects.get(id=site_config_id)
-        process = CrawlerProcess(settings={
-            "ITEM_PIPELINES": {
-                "scholarscope.scholarships.pipelines.ScholarshipPipeline": 300,
-            },
-            "PLAYWRIGHT_BROWSER_TYPE": "chromium",
-            "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
-        })
-        # process = CrawlerProcess(...)
-        spider_module = importlib.import_module(
-            'scholarscope_scrapers.scholarscope_scrapers.spiders.scholarships_spider'
-        )
-        ScholarshipBatchSpider = getattr(spider_module, 'ScholarshipBatchSpider')
-        process.crawl(ScholarshipBatchSpider,
-                     site_config_id=site_config_id, scrape_event_id=scrape_event_id)
+# @shared_task(bind=True, max_retries=3, default_retry_delay=60)
+# def scrape_site(self, site_config_id, scrape_event_id=None):
+#     from scrapy.crawler import CrawlerProcess
+#     try:
+#         site = SiteConfig.objects.get(id=site_config_id)
+#         process = CrawlerProcess(settings={
+#             "ITEM_PIPELINES": {
+#                 "scholarscope.scholarships.pipelines.ScholarshipPipeline": 300,
+#             },
+#             "PLAYWRIGHT_BROWSER_TYPE": "chromium",
+#             "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
+#         })
+#         # process = CrawlerProcess(...)
+#         spider_module = importlib.import_module(
+#             'scholarscope_scrapers.scholarscope_scrapers.spiders.scholarships_spider'
+#         )
+#         ScholarshipBatchSpider = getattr(spider_module, 'ScholarshipBatchSpider')
+#         process.crawl(ScholarshipBatchSpider,
+#                      site_config_id=site_config_id, scrape_event_id=scrape_event_id)
 
-        process.start()
+#         process.start()
 
-        site.last_scraped = timezone.now()
-        site.save(update_fields=["last_scraped"])
+#         site.last_scraped = timezone.now()
+#         site.save(update_fields=["last_scraped"])
 
-    except Exception as exc:
-        raise self.retry(exc=exc)
+#     except Exception as exc:
+#         raise self.retry(exc=exc)
     
 @shared_task
 def generate_scholarship_embedding(scholarship_id):
@@ -228,3 +227,253 @@ def generate_profile_embedding(profile_id):
 def batch_invalidate_user_recommendations(user_ids):
     for uid in user_ids:
         cache.delete(_rec_cache_key(uid))
+
+
+
+# import subprocess
+# import sys
+# from celery import shared_task
+# from django.utils import timezone
+# from scholarships.models import SiteConfig
+
+
+# @shared_task
+# def scrape_all_sources():
+#     for site in SiteConfig.objects.filter(active=True):
+#         scrape_site.delay(site.id)
+
+
+# @shared_task(bind=True, max_retries=3, default_retry_delay=60)
+# def scrape_site(self, site_config_id, scrape_event_id=None):
+#     try:
+#         cmd = [
+#             sys.executable,  # the same Python environment Celery uses
+#             "-m",
+#             "scrapy",
+#             "crawl",
+#             "scholarship_batch",
+#             "-a",
+#             f"site_config_id={site_config_id}",
+#         ]
+
+#         if scrape_event_id:
+#             cmd.append(f"-a scrape_event_id={scrape_event_id}")
+
+#         # Run the spider in a *separate process*
+#         subprocess.check_call(cmd)
+
+#         site = SiteConfig.objects.get(id=site_config_id)
+#         site.last_scraped = timezone.now()
+#         site.save(update_fields=["last_scraped"])
+
+#     except Exception as exc:
+#         raise self.retry(exc=exc)
+
+# scholarships/tasks.py
+# import subprocess
+# import shlex
+# from celery import shared_task
+# from django.utils import timezone
+# from scholarships.models import SiteConfig
+
+
+# @shared_task(bind=True, max_retries=5, default_retry_delay=120)
+# def scrape_site(self, site_config_id, scrape_event_id=None):
+#     try:
+#         site = SiteConfig.objects.get(id=site_config_id)
+        
+#         # Build the exact same command you'd run in terminal
+#         cmd = [
+#             "scrapy", "crawl", "scholarship_batch",
+#             "-a", f"site_config_id={site_config_id}",
+#             "-a", f"max_items=100"
+#         ]
+        
+#         if scrape_event_id:
+#             cmd += ["-a", f"scrape_event_id={scrape_event_id}"]
+
+#         # Run as subprocess — completely isolated
+#         result = subprocess.run(
+#             cmd,
+#             cwd="scholarscope_scrapers",  # important: run from scrapy project root
+#             capture_output=True,
+#             text=True,
+#             timeout=600  # 10 minutes max
+#         )
+
+#         if result.returncode != 0:
+#             raise Exception(f"Scrapy failed: {result.stderr}")
+
+#         # Success!
+#         site.last_scraped = timezone.now()
+#         site.save(update_fields=["last_scraped"])
+
+#     except subprocess.TimeoutExpired:
+#         raise self.retry(countdown=300, exc=Exception("Scrapy timeout"))
+#     except Exception as exc:
+#         raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))
+
+# Render Free Tier:
+#     - Django
+#     - Celery (only for email & cleanup)
+#     - API
+
+# External Worker (GitHub Actions / local machine / VPS):
+#     - Scrapy Playwright spider
+#     - Chromium
+
+from celery import shared_task, chord
+from django.utils import timezone
+from .models import SiteConfig, Scholarship, ScholarshipScrapeEvent
+from scholarscope_scrapers.scraping3 import ScholarshipListScraper, ScholarshipScraper
+@shared_task
+def scrape_all_sources():
+    """Schedule scraping for all active sources."""
+    sources = SiteConfig.objects.filter(active=True)
+    for site in sources:
+        scrape_site.delay(site_config_id=site.id)
+
+def save_scholarship_detail(data, source_name, source_url, scrape_event):
+    """
+    Save ONE scholarship cleanly.
+    Called by: scrape_scholarship_detail Celery task.
+    """
+
+    if not data:
+        return None
+
+    # --- Extract core fields ---
+    title = data.get("title") or "Untitled Scholarship"
+    link = data.get("link", "")
+    if isinstance(link, dict):
+        link = link.get("url", "")
+
+    if not link:
+        # invalid entry
+        return None
+
+    # Fix dates
+    for f in ("start_date", "end_date"):
+        dt = data.get(f)
+        if isinstance(dt, timezone.datetime) and timezone.is_naive(dt):
+            data[f] = timezone.make_aware(dt)
+
+    levels = data.get("level", [])
+    tags = data.get("tags", [])
+    fingerprint = data.get("fingerprint")
+
+    # --- Save or update ---
+    with transaction.atomic():
+        scholarship, created = Scholarship.objects.update_or_create(
+            fingerprint=fingerprint,
+            defaults={
+                "title": title,
+                "start_date": data.get("start_date"),
+                "end_date": data.get("end_date"),
+                "description": data.get("description", ""),
+                "reward": data.get("reward", ""),
+                "link": link,
+                "requirements": data.get("requirements", ""),
+                "eligibility": data.get("eligibility", ""),
+                "source": source_name,
+                "scrape_event": scrape_event,
+            },
+        )
+
+        # --- Update M2M ---
+        scholarship.level.clear()
+        scholarship.tags.clear()
+
+        for lvl in levels:
+            lvl_obj, _ = Level.objects.get_or_create(level=lvl)
+            scholarship.level.add(lvl_obj)
+
+        for t in tags:
+            tag_obj, _ = Tag.objects.get_or_create(name=t)
+            scholarship.tags.add(tag_obj)
+
+    return scholarship
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def scrape_scholarship_detail(self, url, site_id, scrape_event_id):
+    try:
+        site = SiteConfig.objects.get(id=site_id)
+        scrape_event = ScholarshipScrapeEvent.objects.get(id=scrape_event_id)
+
+        scraper = ScholarshipScraper(site_config=site)  # whatever scraper returns
+        data = scraper.scrape(url)
+        save_scholarship_detail(
+            data=data,
+            source_name=site.name,
+            source_url=site.list_url,
+            scrape_event=scrape_event
+        )
+
+    except Exception as e:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e)    
+        FailedScholarship.objects.create(
+            scrape_event_id=scrape_event_id,
+            url=url,
+            reason=str(e)
+        )
+        raise
+
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def scrape_site(self, site_config_id, scrape_event_id=None, max_items=50, delay_between_scrapes=2):
+    try:
+        site = SiteConfig.objects.get(id=site_config_id)
+
+        # 1. Start scrape event
+        if not scrape_event_id:
+            scrape_event = ScholarshipScrapeEvent.objects.create_scrape_event(
+                source_name=site.name,
+                source_url=site.list_url
+            )
+        else:
+            scrape_event = ScholarshipScrapeEvent.objects.get(id=scrape_event_id)
+
+        # 2. Scrape list page for scholarships
+        list_scraper = ScholarshipListScraper(site_config=site, max_items=max_items, delay=delay_between_scrapes)
+        scraped_list = list_scraper.scrape_list()
+
+        if not scraped_list:
+            scrape_event.mark_failed("No scholarships found on list page")
+            return
+
+        # 3. Schedule individual detail scrapes as Celery tasks
+        detail_tasks = []
+        for item in scraped_list:
+            detail_tasks.append(scrape_scholarship_detail.s(item['url'], site.id, scrape_event.id))
+
+        # Run all detail tasks as a group
+        chord(detail_tasks)(finalize_scrape_event.s(scrape_event.id))
+        # for item in scraped_list:
+        #     scrape_scholarship_detail(url=item['url'], site_id=site.id, scrape_event_id=scrape_event.id)
+
+
+        # 4. Update site last_scraped timestamp
+        site.last_scraped = timezone.now()
+        site.save(update_fields=["last_scraped"])
+
+        return f"Scheduled {len(scraped_list)} scholarships for detail scraping"
+
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+
+@shared_task
+def finalize_scrape_event(results, scrape_event_id):
+    event = ScholarshipScrapeEvent.objects.get(id=scrape_event_id)
+
+    failed = FailedScholarship.objects.filter(scrape_event=event).exists()
+
+    if failed:
+        event.mark_partial("Some scholarships failed — see FailedScholarship table")
+    else:
+        event.mark_success()
+
+    return "Scrape event completed"
