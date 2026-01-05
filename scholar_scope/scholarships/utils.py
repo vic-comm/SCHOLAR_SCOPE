@@ -8,8 +8,17 @@ import numpy as np
 from django.db.models import Count, Q
 from django.utils.timezone import now
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
 from typing import Optional, List
+
+_embedder = None
+
+def get_embedder():
+    global _embedder
+    if _embedder is None:
+        from sentence_transformers import SentenceTransformer
+        _embedder = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+    return _embedder
+
 def random_string_generator(size=10, chars=string.ascii_lowercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
@@ -17,7 +26,6 @@ def generate_fingerprint(title, link):
     base = f"{title.lower().strip()}-{link}"
     return hashlib.sha256(base.encode()).hexdigest()
 # Load model once globally (so it's not reloaded on every task)
-model = SentenceTransformer('all-MiniLM-L6-v2')
 
 def _text_cache_key(text: str) -> str:
     return "embedding_" + hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -35,7 +43,7 @@ def get_text_embedding(text, ttl_seconds= 7 * 24 * 3600) -> Optional[List[float]
     if embedding is not None:
         return embedding
 
-    emb = model.encode(text).tolist()
+    emb = get_embedder().encode(text).tolist()
     cache.set(key, emb, timeout=ttl_seconds)
     return emb
 

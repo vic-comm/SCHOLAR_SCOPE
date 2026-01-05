@@ -1,146 +1,71 @@
 import scrapy
 from datetime import datetime
+import dateparser
 import re
 from ..utils.django_setup import setup_django
+from ..utils.llm_engine import LLMEngine
+from ..utils.quality import QualityCheck
+from .schemas import ScholarshipScrapedSchema
+from pydantic import ValidationError
 setup_django()
 from scholarships.models import SiteConfig, Scholarship
 from scholarships.utils import generate_fingerprint
-# class ScholarshipBatchSpider(scrapy.Spider):
-#     name = "scholarship_batch"
-#     custom_settings = {"PLAYWRIGHT_BROWSER_TYPE": "chromium"}
-
-#     def start_requests(self):
-#         for domain, config in SITE_CONFIGS.items():
-#             list_page = config.get("list_page", {})
-#             for url in list_page.get("urls", []):
-#                 yield scrapy.Request(
-#                     url,
-#                     meta={"playwright": True, "domain": domain},
-#                     callback=self.parse_list,
-#                 )
-
-#     async def parse_list(self, response):
-#         domain = response.meta.get("domain")
-#         config = SITE_CONFIGS.get(domain, {}).get("list_page", {})
-#         link_selector = config.get("link_selector")
-
-#         if not link_selector:
-#             self.logger.warning(f"No link selector found for {domain}")
-#             return
-
-#         links = response.css(link_selector).getall()
-#         for link in links:
-#             absolute = response.urljoin(link)
-#             yield scrapy.Request(
-#                 absolute,
-#                 meta={"playwright": True, "domain": domain},
-#                 callback=self.parse_detail,
-#             )
-
-#     async def parse_detail(self, response):
-#         domain = response.meta.get("domain")
-#         config = SITE_CONFIGS.get(domain, {}).get("detail_page", {})
-
-#         def get_text(selector):
-#             """Extracts all text joined cleanly or empty string if selector missing."""
-#             if not selector:
-#                 return ""
-#             return " ".join([x.strip() for x in response.css(selector).getall() if x.strip()])
-
-#         # Extract core fields
-#         title = get_text(config.get("title"))
-#         description = get_text(config.get("description"))
-#         reward = get_text(config.get("reward"))
-#         eligibility = get_text(config.get("eligibility"))
-#         requirements = get_text(config.get("requirements"))
-#         start_date = get_text(config.get("start_date"))
-#         end_date = get_text(config.get("end_date"))
-
-#         # Inference based on relevant sections only
-#         tags = self.infer_tags(response, description, eligibility, requirements)
-#         levels = self.infer_levels(response, description, eligibility, requirements)
-
-#         yield {
-#             "title": title,
-#             "description": description,
-#             "reward": reward,
-#             "link": response.url,
-#             "start_date": start_date,
-#             "end_date": end_date,
-#             "requirements": requirements,
-#             "eligibility": eligibility,
-#             "tags": tags,
-#             "level": levels,
-#             "scraped_at": datetime.now().isoformat(),
-#         }
-
-#     def infer_levels(self, response, description, eligibility, requirements):
-#         """Infer education levels — priority: selector → fallback to keyword inference."""
-
-#         # ✅ 1️⃣ Check if site-config provides level selector
-#         level_selector = self.site_config.get("level_selector")
-#         if level_selector:
-#             level_elements = response.css(level_selector).getall()
-#             cleaned_levels = [lvl.strip().lower() for lvl in level_elements if lvl.strip()]
-#             if cleaned_levels:
-#                 return cleaned_levels  # ✅ Return directly if site explicitly provides levels
-
-#         # ✅ 2️⃣ Fallback: infer from description-based text
-#         combined_text = f"{description} {eligibility} {requirements}".lower()
-
-#         level_keywords = {
-#             "highschool": ["secondary school", "high school", "ssce", "waec", "neco", "alevel"],
-#             "undergraduate": ["undergraduate", "bachelor", "bsc", "ba", "first degree", "college student"],
-#             "postgraduate": ["postgraduate", "masters", "msc", "ma", "mphil", "graduate school"],
-#             "phd": ["phd", "doctorate", "doctoral", "dphil", "research degree"],
-#         }
-
-#         detected = [
-#             level for level, kws in level_keywords.items()
-#             if any(kw in combined_text for kw in kws)
-#         ]
-#         return detected or ["unspecified"]
-
-
-#     def infer_tags(self, response, description, eligibility, requirements):
-#         """Infer scholarship tags — priority: selector → fallback to keyword inference."""
-
-#         # ✅ 1️⃣ Check if site-config provides tag selector
-#         tag_selector = self.site_config.get("tag_selector")
-#         if tag_selector:
-#             tag_elements = response.css(tag_selector).getall()
-#             cleaned_tags = [tag.strip().lower() for tag in tag_elements if tag.strip()]
-#             if cleaned_tags:
-#                 return cleaned_tags  # ✅ Return immediately if selector yields usable tags
-
-#         # ✅ 2️⃣ Fallback: keyword inference
-#         combined_text = f"{description} {eligibility} {requirements}".lower()
-
-#         tag_keywords = {
-#             "international": ["international", "global", "worldwide", "abroad", "foreign"],
-#             "merit": ["merit", "academic excellence", "outstanding", "scholarly"],
-#             "need": ["need", "financial aid", "low income", "need-based", "disadvantaged"],
-#             "women": ["women", "female", "girls"],
-#             "stem": ["science", "engineering", "technology", "mathematics", "stem"],
-#         }
-
-#         detected = [
-#             tag for tag, kws in tag_keywords.items()
-#             if any(kw in combined_text for kw in kws)
-#         ]
-#         return detected or ["general"]
-  # ✅ Import your model
-
-
 class ScholarshipBatchSpider(scrapy.Spider):
     name = "scholarship_batch"
-    custom_settings = {"PLAYWRIGHT_BROWSER_TYPE": "chromium"}
+    custom_settings = {
+            # ✅ Pipeline Path
+            "ITEM_PIPELINES": {
+                'scholarscope_scrapers.pipelines.RenewalAndDuplicatePipeline': 200,
+                "scholarscope_scrapers.scholarscope_scrapers.pipelines.ScholarshipPipeline": 300,
+            },
+            
+            # ✅ Playwright Handlers
+            "DOWNLOAD_HANDLERS": {
+                "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+                "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            },
+            
+            # 👇 CRITICAL: Switch to Firefox
+            "PLAYWRIGHT_BROWSER_TYPE": "firefox",
+            
+            "PLAYWRIGHT_LAUNCH_OPTIONS": {
+                "headless": True,
+                "timeout": 60000, # 60s timeout
+                # ❌ Removed "args" list (Chrome flags like --disable-http2 are invalid for Firefox)
+            },
+            
+            # 👇 CRITICAL: Firefox Context
+            "PLAYWRIGHT_CONTEXT_ARGS": {
+                "ignore_https_errors": True, # Ignore SSL/TLS certificate errors
+                "java_script_enabled": True,
+                "bypass_csp": True,
+                
+                # ✅ Correct Firefox User Agent
+                "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/115.0",
+                
+                "viewport": {"width": 1280, "height": 720},
+                "service_workers": "block",
+            },
+
+            # ✅ Scrapy Config
+            "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
+            "LOG_LEVEL": "DEBUG",
+            "ROBOTSTXT_OBEY": False,
+            "COOKIES_ENABLED": True,
+            # Handle 403s so we can see the error pages if they happen
+            "HTTPERROR_ALLOWED_CODES": [403, 404, 500],
+            
+            # 👇 Important: Prevent Scrapy from overriding our Playwright User Agent
+            "USER_AGENT": None, 
+        }
 
     def __init__(self, site_config_id=None, scrape_event_id=None, max_items=30, **kwargs):
         super().__init__(**kwargs)
+        
         if not site_config_id:
             raise ValueError("⚠ site_config_id is required!")
 
+        # 1. Load Configuration
         self.site_config = SiteConfig.objects.get(id=site_config_id)
         self.start_urls = [self.site_config.list_url]
         self.scrape_event_id = scrape_event_id
@@ -148,15 +73,66 @@ class ScholarshipBatchSpider(scrapy.Spider):
         self.scraped_count = 0
         self.consecutive_duplicates = 0
 
-        # Preload fingerprints of existing scholarships
+        # 2. 👇 CRITICAL FIX: Robust Allowed Domains Logic 👇
+        from urllib.parse import urlparse
+        
+        # Extract the base domain (e.g., 'scholarshipregion.com')
+        parsed_base = urlparse(self.site_config.base_url)
+        clean_domain = parsed_base.netloc.replace("www.", "")
+        
+        # Allow both 'example.com' AND 'www.example.com'
+        self.allowed_domains = [clean_domain, f"www.{clean_domain}"]
+        
+        # Also check the list_url just in case it is on a subdomain
+        list_domain = urlparse(self.site_config.list_url).netloc.replace("www.", "")
+        if list_domain != clean_domain:
+            self.allowed_domains.append(list_domain)
+            self.allowed_domains.append(f"www.{list_domain}")
+            
+        print(f"🔓 DEBUG: Allowed Domains set to: {self.allowed_domains}")
+
+        # 3. Load Fingerprints (Optimization)
         self.existing_fingerprints = set(
             Scholarship.objects.values_list("fingerprint", flat=True)
         )
+        
+        # 4. Initialize AI
+        self.llm_engine = LLMEngine()
+    
+    def extract_section_content(self, response, selector_raw):
+        """
+        Safely extracts ALL text from a selector string as a clean string.
+        """
+        if not selector_raw: return None
+        
+        # 1. Clean the selector (strip invalid Scrapy syntax)
+        clean_sel = selector_raw.replace("::text", "").strip()
+        
+        try:
+            # 2. Try getting text directly (fastest)
+            text_list = response.css(f"{clean_sel}::text").getall()
+            text = " ".join([t.strip() for t in text_list if t.strip()])
+            
+            # 3. Fallback: Recursively get all text inside elements (best for <li><b>...</b></li>)
+            if not text:
+                text = response.css(clean_sel).xpath("string(.)").get()
+                
+            return text.strip() if text else None
+        except Exception:
+            return None
 
     def start_requests(self):
+        self.logger.error("🔥 start_requests CALLED 🔥")
         yield scrapy.Request(
             self.start_urls[0],
-            meta={"playwright": True},
+            meta={
+                "playwright": True,
+                "playwright_page_goto_kwargs": {
+                    # 👇 CRITICAL: Don't wait for all network traffic to stop
+                    "wait_until": "domcontentloaded", 
+                    "timeout": 60000,
+                }
+            },
             callback=self.parse_list,
         )
 
@@ -165,12 +141,12 @@ class ScholarshipBatchSpider(scrapy.Spider):
         list_item_sel = cfg.list_item_selector
         link_sel = cfg.link_selector
         title_sel = cfg.title_selector
-
+        link_sel_raw = cfg.link_selector.replace("::attr(href)", "").strip()
+        title_sel_raw = cfg.title_selector.replace("::text", "").strip()
         for card in response.css(list_item_sel):
-            # Stop if reached limit
             if self.scraped_count >= self.max_items:
                 self.logger.info(
-                    f"✅ Reached max scrape limit ({self.max_items}) for {self.site_config.name}"
+                    f"Reached max scrape limit ({self.max_items}) for {self.site_config.name}"
                 )
                 break
 
@@ -180,13 +156,42 @@ class ScholarshipBatchSpider(scrapy.Spider):
                     f"⚠ Stopping early after 3 consecutive duplicates for {self.site_config.name}"
                 )
                 break
+            clean_link_sel = link_sel.replace("::attr(href)", "").strip()
+            
+            relative_link = None
+            try:
+                # 2. Try extracting via .attrib (The robust way)
+                link_el = card.css(link_sel_raw)
+                relative_link = link_el.attrib.get('href')
+                
+                # 3. Fallback: If .attrib failed, try XPath (The "nuclear" way)
+                if not relative_link:
+                    relative_link = card.css(link_sel_raw).xpath('@href').get()
+                    
+            except Exception as e:
+                self.logger.warning(f"Extraction error for '{clean_link_sel}': {e}")
+                continue
 
-            # Extract link and title
-            relative_link = card.css(f"{link_sel}::attr(href)").get()
-            title = card.css(f"{title_sel}::text").get()
+            if not relative_link:
+                self.logger.warning(f"No link found using selector: {clean_link_sel}")
+                continue
+
+            title = None
+            try:
+                # Try getting text content directly
+                # This fetches "My Scholarship Title" from <h2>My Scholarship Title</h2>
+                title = card.css(title_sel_raw + "::text").get()
+                
+                if not title:
+                    # Fallback: Sometimes text is nested deep. 'string(.)' gets it all.
+                    title = card.css(title_sel_raw).xpath("string(.)").get()
+            except:
+                pass
+
             if not relative_link or not title:
                 continue
 
+            # title = card.css(f"{title_sel}::text").get()
             url = response.urljoin(relative_link)
 
             # Compute fingerprint (title + URL hash)
@@ -208,10 +213,15 @@ class ScholarshipBatchSpider(scrapy.Spider):
             yield scrapy.Request(
                 url,
                 meta={
-                    "playwright": True,
-                    "fingerprint": fingerprint,
+                "playwright": True,
+                "fingerprint": fingerprint,
                     "title": title,
-                },
+                "playwright_page_goto_kwargs": {
+                    # 👇 CRITICAL: Don't wait for all network traffic to stop
+                    "wait_until": "domcontentloaded", 
+                    "timeout": 60000,
+                }
+            },
                 callback=self.parse_detail,
             )
     
@@ -219,23 +229,38 @@ class ScholarshipBatchSpider(scrapy.Spider):
     async def parse_detail(self, response):
         cfg = self.site_config
 
-        def extract(selector):
-            if not selector:
-                return None
-            return " ".join(
-                [txt.strip() for txt in response.css(selector).getall() if txt.strip()]
-            )
 
-        # ✅ Extract fields from selectors (fallback to inference if missing)
-        title = extract(cfg.title_selector)
-        description = extract(cfg.description_selector)
-        reward = extract(cfg.reward_selector)
-        eligibility = self.extract_eligibility(extract(cfg.eligibility_selector))
-        requirements = self.extract_requirements(extract(cfg.requirements_selector))
-        end_date = self.parse_date_string(extract(cfg.deadline_selector))
-        start_date = self.parse_date_string(extract(cfg.start_date_selector))
+        def safe_parse_date(selector):
+            raw = self.extract_section_content(response, selector)
+            self.logger.warning(f"📅 RAW_DATE: '{raw}'")
+            if not raw: return None
+            try:
+                dt = dateparser.parse(raw, settings={'STRICT_PARSING': False, 'PREFER_DATES_FROM': 'future'})
+                return dt.date() if dt else None
+            except:
+                return None
+        # Extract fields from selectors (fallback to inference if missing)
+        title = self.extract_section_content(response, cfg.title_selector)
+        description = self.extract_section_content(response, cfg.description_selector)
+        reward = self.extract_section_content(response, cfg.reward_selector)
+        eligibility = self.extract_eligibility(response, section_text=self.extract_section_content(response, cfg.eligibility_selector))
+        requirements = self.extract_requirements(response, section_text=self.extract_section_content(response, cfg.requirements_selector))
+        end_date = safe_parse_date(cfg.deadline_selector)
+        start_date = safe_parse_date(cfg.start_date_selector)
         tags = self.infer_tags(response, description or "", eligibility or "", requirements or "")
         levels = self.infer_levels(response, description or "", eligibility or "", requirements or "")
+
+        missing_fields = []
+
+        if not QualityCheck.check("title", title): missing_fields.append("title")
+        if not QualityCheck.check("requirements", requirements): missing_fields.append("requirements")
+        if not QualityCheck.check("reward", reward): missing_fields.append("reward")
+        if not QualityCheck.check("end_date", end_date): missing_fields.append("end_date")
+        if not QualityCheck.check("start_date", start_date): missing_fields.append("start_date")
+        if not QualityCheck.check("tags", tags): missing_fields.append("tags")
+        if not QualityCheck.check("levels", levels): missing_fields.append("levels")
+        if not QualityCheck.check("eligibility", eligibility): missing_fields.append("eligibility")
+        if not QualityCheck.check("description", description): missing_fields.append("description")
 
         item = {
             "title": title,
@@ -251,32 +276,60 @@ class ScholarshipBatchSpider(scrapy.Spider):
             "scraped_at": datetime.now().isoformat(),
         }
 
-        yield item
+        if missing_fields:
+            if len(missing_fields) > 3 or "description" in missing_fields:
+                self.logger.info("Data is too corrupted. Requesting FULL LLM extraction.")
+                recovered_data = await self.llm_engine.extract_data(response.text, response.url)
+                if isinstance(recovered_data, list):
+                    if len(recovered_data) > 0:
+                        recovered_data = recovered_data[0] # Take the dictionary out
+                    else:
+                        recovered_data = {}
+                if recovered_data.get("end_date"):
+                    recovered_data["end_date"] = dateparser.parse(recovered_data["end_date"]).date()
+                if recovered_data.get("start_date"):
+                    recovered_data["start_date"] = dateparser.parse(recovered_data["start_date"]).date()
+                item.update(recovered_data) 
 
-    def parse_date_string(self, date_str):
-        """Parse date string to datetime object"""
-        date_str = date_str.strip()
-        
-        # Remove common prefixes/suffixes
-        date_str = re.sub(r'^(on|by|from|until|before|after)\s+', '', date_str, flags=re.IGNORECASE)
-        date_str = re.sub(r'\s+(onwards?|forward)$', '', date_str, flags=re.IGNORECASE)
-        
-        # Common date formats
-        date_formats = [
-            '%d/%m/%Y', '%m/%d/%Y', '%Y-%m-%d',
-            '%d-%m-%Y', '%B %d, %Y', '%d %B %Y',
-            '%b %d, %Y', '%d %b %Y', '%Y/%m/%d',
-            '%d.%m.%Y', '%Y.%m.%d'
-        ]
-        
-        for fmt in date_formats:
-            try:
-                parsed = datetime.strptime(date_str, fmt)
-                return parsed.dat()
-            except:
-                continue
-        
-        return None
+            else:                
+                recovered_data = await self.llm_engine.recover_specific_fields(
+                    response.text, missing_fields
+                )
+                if isinstance(recovered_data, list):
+                    if len(recovered_data) > 0:
+                        recovered_data = recovered_data[0] # Take the dictionary out
+                    else:
+                        recovered_data = {}
+                if recovered_data.get("end_date"):
+                    recovered_data["end_date"] = dateparser.parse(recovered_data["deadline"]).date()
+                if recovered_data.get("start_date"):
+                    recovered_data["start_date"] = dateparser.parse(recovered_data["start_date"]).date()
+                for field in missing_fields:
+                    item[field] = recovered_data[field]
+        if not item.get("title"):
+            # Fallback: Use URL as title so we can identify it later
+            item["title"] = f"Unknown Scholarship - {response.url}"
+            
+        if not item.get("link"):
+            item["link"] = response.url
+            
+        if not item.get("description"):
+            item["description"] = "Description unavailable."
+            
+        if not item.get("scraped_at"):
+            item["scraped_at"] = datetime.now().isoformat()
+
+        # B. Ensure List Fields are Lists (Not None)
+        for field in ["requirements", "eligibility", "tags", "levels"]:
+            if item.get(field) is None:
+                item[field] = []
+        try:
+            valid_item = ScholarshipScrapedSchema(**item)
+            yield valid_item.dict()
+
+        except ValidationError as e:
+            self.logger.warning(f"Dropping item {item.get('title')}: {e}")
+
 
     def infer_levels(self, response, description, eligibility, requirements):
         cfg = self.site_config
@@ -339,60 +392,69 @@ class ScholarshipBatchSpider(scrapy.Spider):
     
     import re
 
-# ===============================
-# 🧠 REQUIREMENTS EXTRACTOR
-# ===============================
-    def extract_requirements(self, response):
+    def extract_requirements(self, response, section_text=None):
         """Extract scholarship requirements/documents needed"""
+        requirements = []
         try:
-            cfg = self.site_config
-            if cfg.requirements_selector:
-                page_text = " ".join(response.css(cfg.requirements_selector + " *::text").getall())
-            elif cfg.description_selector:
-                page_text = " ".join(response.css(cfg.description_selector + " *::text").getall())
-            else:
-                page_text = " ".join(response.css("body *::text").getall())
-            requirements = []
-
-            # Common requirement sections
-            requirement_patterns = [
-                r'requirements?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'documents?\s*(?:required|needed)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'application\s*requirements?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'needed\s*documents?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'submit[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'must\s*(?:provide|submit|include)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-            ]
-
-            # Structured list search
-            list_selectors = [
-                'ul li', 'ol li', '.requirements li', '.documents li',
-                '[class*="requirement"] li', '[class*="document"] li'
-            ]
-
-            for selector in list_selectors:
-                for el in response.css(selector):
-                    text = el.css("::text").get(default="").strip()
-                    if self.is_requirement_text(text):
-                        requirements.append(text)
-                        if len(requirements) >= 10:
-                            break
-                if requirements:
-                    break
-
-            # Regex fallback
+            if section_text:
+                clean_text = section_text
+                for h in ["Requirements:", "Documents Required:", "What you need:"]:
+                    clean_text = clean_text.replace(h, "")
+                
+                parts = re.split(r'[\n;•►→➤]', clean_text)
+                for p in parts:
+                    clean_p = p.strip()
+                    if self.is_requirement_text(clean_p):
+                        requirements.append(clean_p)
             if not requirements:
-                for pattern in requirement_patterns:
-                    matches = re.findall(pattern, page_text, re.IGNORECASE | re.MULTILINE)
-                    if matches:
-                        requirement_text = matches[0].strip()
-                        requirements.extend(self.parse_requirement_text(requirement_text))
-                        if requirements:
-                            break
+                cfg = self.site_config
+                if cfg.requirements_selector:
+                    page_text = " ".join(response.css(cfg.requirements_selector + " *::text").getall())
+                elif cfg.description_selector:
+                    page_text = " ".join(response.css(cfg.description_selector + " *::text").getall())
+                else:
+                    page_text = " ".join(response.css("body *::text").getall())
+                
 
-            # Common keyword fallback
-            if not requirements:
-                requirements.extend(self.extract_common_requirements(page_text))
+                # Common requirement sections
+                requirement_patterns = [
+                    r'requirements?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'documents?\s*(?:required|needed)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'application\s*requirements?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'needed\s*documents?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'submit[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'must\s*(?:provide|submit|include)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                ]
+
+                # Structured list search
+                list_selectors = [
+                    'ul li', 'ol li', '.requirements li', '.documents li',
+                    '[class*="requirement"] li', '[class*="document"] li'
+                ]
+
+                for selector in list_selectors:
+                    for el in response.css(selector):
+                        text = el.css("::text").get(default="").strip()
+                        if self.is_requirement_text(text):
+                            requirements.append(text)
+                            if len(requirements) >= 10:
+                                break
+                    if requirements:
+                        break
+
+                # Regex fallback
+                if not requirements:
+                    for pattern in requirement_patterns:
+                        matches = re.findall(pattern, page_text, re.IGNORECASE | re.MULTILINE)
+                        if matches:
+                            requirement_text = matches[0].strip()
+                            requirements.extend(self.parse_requirement_text(requirement_text))
+                            if requirements:
+                                break
+
+                # Common keyword fallback
+                if not requirements:
+                    requirements.extend(self.extract_common_requirements(page_text))
 
             # Clean + deduplicate
             cleaned = []
@@ -408,57 +470,69 @@ class ScholarshipBatchSpider(scrapy.Spider):
             return ["Requirements not specified"]
 
 
-    # ===============================
-    # 🧠 ELIGIBILITY EXTRACTOR
-    # ===============================
-    def extract_eligibility(self, response):
+    def extract_eligibility(self, response, section_text=None):
         """Extract scholarship eligibility criteria"""
+        eligibility = []
         try:
-            cfg = self.site_config
-            if cfg.eligibility_selector:
-                page_text = " ".join(response.css(cfg.eligibility_selector + " *::text").getall())
-            elif cfg.description_selector:
-                page_text = " ".join(response.css(cfg.description_selector + " *::text").getall())
-            else:
-                page_text = " ".join(response.css("body *::text").getall())
-            eligibility = []
-
-            eligibility_patterns = [
-                r'eligibility[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'eligible\s*(?:candidates?|applicants?)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'who\s*can\s*apply[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'criteria[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'qualifications?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-                r'must\s*be[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
-            ]
-
-            list_selectors = [
-                'ul li', 'ol li', '.eligibility li', '.criteria li',
-                '[class*="eligibility"] li', '[class*="criteria"] li',
-                '[class*="qualification"] li',
-            ]
-
-            for selector in list_selectors:
-                for el in response.css(selector):
-                    text = el.css("::text").get(default="").strip()
-                    if self.is_eligibility_text(text):
-                        eligibility.append(text)
-                        if len(eligibility) >= 10:
-                            break
-                if eligibility:
-                    break
-
+            if section_text:
+                # Clean headers
+                clean_text = section_text
+                for h in ["Eligibility:", "Who can apply:", "Criteria:"]:
+                    clean_text = clean_text.replace(h, "")
+                
+                # Split by bullets/newlines to find items
+                parts = re.split(r'[\n;•►→➤]', clean_text)
+                
+                # Use your existing validator 'is_eligibility_text'
+                for p in parts:
+                    clean_p = p.strip()
+                    if self.is_eligibility_text(clean_p):
+                        eligibility.append(clean_p)
             if not eligibility:
-                for pattern in eligibility_patterns:
-                    matches = re.findall(pattern, page_text, re.IGNORECASE | re.MULTILINE)
-                    if matches:
-                        eligibility_text = matches[0].strip()
-                        eligibility.extend(self.parse_eligibility_text(eligibility_text))
-                        if eligibility:
-                            break
+                cfg = self.site_config
+                if cfg.eligibility_selector:
+                    page_text = " ".join(response.css(cfg.eligibility_selector + " *::text").getall())
+                elif cfg.description_selector:
+                    page_text = " ".join(response.css(cfg.description_selector + " *::text").getall())
+                else:
+                    page_text = " ".join(response.css("body *::text").getall())
 
-            if not eligibility:
-                eligibility.extend(self.extract_common_eligibility(page_text))
+                eligibility_patterns = [
+                    r'eligibility[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'eligible\s*(?:candidates?|applicants?)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'who\s*can\s*apply[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'criteria[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'qualifications?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                    r'must\s*be[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)',
+                ]
+
+                list_selectors = [
+                    'ul li', 'ol li', '.eligibility li', '.criteria li',
+                    '[class*="eligibility"] li', '[class*="criteria"] li',
+                    '[class*="qualification"] li',
+                ]
+
+                for selector in list_selectors:
+                    for el in response.css(selector):
+                        text = el.css("::text").get(default="").strip()
+                        if self.is_eligibility_text(text):
+                            eligibility.append(text)
+                            if len(eligibility) >= 10:
+                                break
+                    if eligibility:
+                        break
+
+                if not eligibility:
+                    for pattern in eligibility_patterns:
+                        matches = re.findall(pattern, page_text, re.IGNORECASE | re.MULTILINE)
+                        if matches:
+                            eligibility_text = matches[0].strip()
+                            eligibility.extend(self.parse_eligibility_text(eligibility_text))
+                            if eligibility:
+                                break
+
+                if not eligibility:
+                    eligibility.extend(self.extract_common_eligibility(page_text))
 
             cleaned = []
             for c in eligibility[:10]:

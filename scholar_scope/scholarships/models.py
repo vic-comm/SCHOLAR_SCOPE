@@ -48,8 +48,8 @@ class Level(models.Model):
     
 class Scholarship(models.Model):
     title = models.CharField(max_length=500)
-    start_date = models.DateTimeField(null=True, blank=True)
-    end_date = models.DateTimeField(null=True, blank=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
     tags = models.ManyToManyField(Tag, related_name='scholarships', blank=True)
     description = models.TextField()
     level = models.ManyToManyField(Level, related_name='scholarships', blank=True)
@@ -57,13 +57,20 @@ class Scholarship(models.Model):
     active = models.BooleanField(default=True)
     link = models.URLField(max_length=1000)
     scrape_event = models.ForeignKey('ScholarshipScrapeEvent', on_delete=models.SET_NULL, null=True, blank=True, related_name='scholarships')
-    eligibility = models.CharField(blank=True, null=True, max_length=1000)
-    requirements = models.CharField(blank=True, null=True, max_length=1000)
+    eligibility = models.JSONField(default=list, blank=True)   
+    requirements = models.JSONField(default=list, blank=True)
     source = models.CharField(null=True, blank=True, max_length=1000)
     created_at = models.DateTimeField(auto_now_add=True)
     fingerprint = models.CharField(max_length=1000, null=True, blank=True)
     slug = models.SlugField(null=True, blank=True, max_length=1000)
     embedding = ArrayField(models.FloatField(), null=True, blank=True)
+    scraped_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
+    is_recurring = models.BooleanField(default=False, help_text="True if this scholarship reopens annually.")
+    last_renewed_at = models.DateTimeField(null=True, blank=True,help_text="The last time we detected a new cycle for this item.")    
+    status = models.CharField(max_length=20, default="active", choices=[("active", "Active"), ("expired", "Expired")])
+
+    class Meta:
+        unique_together = ('fingerprint', 'url')
 
     def generate_unique_slug(self):
         base_slug = slugify(self.title)
@@ -108,7 +115,14 @@ class Scholarship(models.Model):
     
     def get_absolute_url(self):
         return reverse("scholarship_detail", kwargs={"pk": self.pk})
-    
+
+class FailedScholarship(models.Model):
+    scrape_event = models.ForeignKey('ScholarshipScrapeEvent',on_delete=models.CASCADE,related_name='failed_items')
+    url = models.URLField(max_length=1000)
+    reason = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    retries = models.IntegerField(default=0)
+
 
 class ScholarshipScrapeEventManager(models.Manager):
     def create_scrape_event(self, source_name, source_url=None):
@@ -158,6 +172,14 @@ class ScholarshipScrapeEvent(models.Model):
         self.completed_at = timezone.now()
         self.duration = self.completed_at - self.started_at
         self.save()
+    
+    def mark_partial(self, message="Some scholarships failed"):
+        self.status = 'COMPLETED'  # still completed, but with warnings
+        self.error_message = message
+        self.completed_at = timezone.now()
+        self.duration = self.completed_at - self.started_at
+        self.save()
+
     
     def increment_error_count(self):
         self.error_count += 1
@@ -271,28 +293,21 @@ class SiteConfig(models.Model):
         return self.name
 
 
-# class WatchedScholarship(models.Model):
-#     user = models.ForeignKey(User, on_delete=models.CASCADE)
-#     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     notified_for_year = models.DateTimeField(null=True, blank=True)
-#     notified = models.BooleanField(default=False)
-#     class Meta:
-#         unique_together = ("user", "scholarship")  # prevent duplicate watches
+class WatchedScholarship(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    notified_for_year = models.DateTimeField(null=True, blank=True)
+    notified = models.BooleanField(default=False)
+    class Meta:
+        unique_together = ("user", "scholarship")  
 
-#     def __str__(self):
-#         return f"{self.user} watching {self.scholarship.title}"
+    def __str__(self):
+        return f"{self.user} watching {self.scholarship.title}"
 
-# class ScholarshipCycle(models.Model):
-#     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name="cycles")
-#     deadline = models.DateField(null=True)
-#     start_date = models.DateField(null=True)
-#     batch_year = models.IntegerField(db_index=True)
-#     status = models.CharField(max_length=20, default="active")
-#     scraped_at = models.DateTimeField(auto_now_add=True)
-
-# class ScholarshipRenewalLog(models.Model):
-#     old_scholarship = models.ForeignKey("Scholarship", on_delete=models.SET_NULL, null=True, related_name="old_versions")
-#     new_scholarship = models.ForeignKey("Scholarship", on_delete=models.SET_NULL, null=True, related_name="new_versions")
-#     detected_at = models.DateTimeField(auto_now_add=True)
-#     diff_summary = models.JSONField(default=dict)
+class ScholarshipCycle(models.Model):
+    scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name="cycles")
+    deadline = models.DateField(null=True)
+    batch_year = models.IntegerField(db_index=True)
+    status = models.CharField(max_length=20, default="active")
+    scraped_at = models.DateTimeField(auto_now_add=True)

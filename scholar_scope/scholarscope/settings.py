@@ -27,6 +27,7 @@ sys.path.append(SCRAPERS_DIR)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY')
+# SECRET_KEY = '6dik9^mld%u(9jwj-t@o758h$(^7d@#d*&he&j-2ovo=v6slh@'
 # 6dik9^mld%u(9jwj-t@o758h$(^7d@#d*&he&j-2ovo=v6slh@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=False, cast=bool)
@@ -141,13 +142,22 @@ WSGI_APPLICATION = "scholarscope.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'scholar_scope_db',
+        'USER': 'chidera',  # Your mac username
+        'PASSWORD': '',     # Often empty for local brew install
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
-
 import dj_database_url
 # DATABASES['default'] = dj_database_url.parse(config('DATABASE_URL'))
 
@@ -256,10 +266,6 @@ SOCIALACCOUNT_ADAPTER="scholarscope.adapters.MySocialAccountAdapter"
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
-
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=True
-
 CELERY_BEAT_SCHEDULER='django_celery_beat.schedulers.DatabaseScheduler'
 SOCIALACCOUNT_AUTO_SIGNUP = True
 LOGIN_REDIRECT_URL = 'scholarship_list'
@@ -317,11 +323,3 @@ SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
 
 INTERNAL_IPS = ['127.0.0.1', 'localhost:8000']
 
-# settings.py
-
-DOWNLOAD_HANDLERS = {
-    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-}
-
-TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"

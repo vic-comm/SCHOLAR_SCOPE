@@ -7,7 +7,7 @@ __pycache__/
 *.so
 
 node_modules/
-
+venv/
 # Distribution / packaging
 .Python
 build/
@@ -204,3 +204,4 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml.env
 .env
+venv/
