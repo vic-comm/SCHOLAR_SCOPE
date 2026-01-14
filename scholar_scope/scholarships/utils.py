@@ -16,7 +16,7 @@ def get_embedder():
     global _embedder
     if _embedder is None:
         from sentence_transformers import SentenceTransformer
-        _embedder = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+        _embedder = SentenceTransformer('all-MiniLM-L6-v2', device='cpu', model_kwargs={"low_cpu_mem_usage": False})
     return _embedder
 
 def random_string_generator(size=10, chars=string.ascii_lowercase + string.digits):

@@ -34,14 +34,14 @@ def scholarship_post_save_invalidate(sender, instance, created, **kwargs):
 
     # --- Strategy A: selective invalidation ---
     tag_ids = list(instance.tags.values_list("id", flat=True)) if hasattr(instance, "tags") else []
-    level_ids = list(instance.level.values_list("id", flat=True)) if hasattr(instance, "levels") else []
+    level_ids = list(instance.level.values_list("id", flat=True)) if hasattr(instance, "level") else []
 
     if not tag_ids and not level_ids:
         return  # nothing to match on
 
     user_ids = list(
         Profile.objects.filter(
-            models.Q(tags__in=tag_ids) | models.Q(levels__in=level_ids)
+            models.Q(tags__in=tag_ids) | models.Q(level__in=level_ids)
         ).distinct().values_list("user_id", flat=True)
     )
 

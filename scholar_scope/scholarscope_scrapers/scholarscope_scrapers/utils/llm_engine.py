@@ -6,9 +6,27 @@ import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from dotenv import load_dotenv
 from pathlib import Path
-env_path = Path(__file__).resolve().parent.parent.parent / '.env'
+# env_path = Path(__file__).resolve().parent.parent.parent / '.env'
 
 # 2. Load it explicitly
+def find_env_file():
+    # Start at the current file's directory
+    current_dir = Path(__file__).resolve().parent
+    
+    # Check current directory and move up 5 levels max
+    for _ in range(5):
+        env_path = current_dir / '.env'
+        if env_path.exists():
+            return env_path
+        
+        # Stop if we hit the root of the filesystem
+        if current_dir.parent == current_dir:
+            break
+            
+        current_dir = current_dir.parent
+    
+    return None
+env_path = find_env_file()
 load_dotenv(dotenv_path=env_path)
 
 class LLMEngine:
@@ -16,18 +34,14 @@ class LLMEngine:
         print(f"DEBUG: Loading .env from {env_path}")
         print(f"DEBUG: Key found? {'Yes' if os.getenv('GOOGLE_API_KEY') else 'No'}")
         api_key = os.getenv("GOOGLE_API_KEY")
-        genai.configure(api_key="AIzaSyDPKVyJx29zRUBGCjZ3nzwI8rZ_thG85Zo")
+        genai.configure(api_key=api_key)
         
-        # self.model = genai.GenerativeModel(
-        #     model_name="gemini-1.5-flash-latest", 
-        #     generation_config={"response_mime_type": "application/json"}
-        # )
+        
         self.model = genai.GenerativeModel(
              model_name="gemini-3-flash-preview", 
              generation_config={"response_mime_type": "application/json"}
          )
 
-        # Safety settings to prevent blocking legitimate content
         self.safety_settings = {
             HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,

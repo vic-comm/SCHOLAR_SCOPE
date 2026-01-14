@@ -413,7 +413,33 @@ class SiteConfigViewset(viewsets.ModelViewSet):
 
 
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .models import WatchedScholarship, Scholarship
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_watch_scholarship(request, pk):
+    try:
+        scholarship = Scholarship.objects.get(pk=pk)
+    except Scholarship.DoesNotExist:
+        return Response({"error": "Scholarship not found"}, status=404)
+
+    # Toggle logic: If exists, delete. If not, create.
+    watch_instance, created = WatchedScholarship.objects.get_or_create(
+        user=request.user,
+        scholarship=scholarship
+    )
+
+    if not created:
+        watch_instance.delete()
+        return Response({"status": "unwatched", "message": "You are no longer watching this scholarship."})
+
+    return Response({
+        "status": "watched", 
+        "message": "You will be notified when this scholarship reopens next year."
+    })
 
 
 

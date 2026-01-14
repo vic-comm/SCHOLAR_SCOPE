@@ -665,7 +665,6 @@ from django.utils import timezone
 from sklearn.metrics.pairwise import cosine_similarity
 from datetime import timedelta
 from django.core.mail import send_mail
-from scholarships.models import WatchedScholarship, Scholarship
 logger = logging.getLogger(__name__)
 
 
@@ -690,28 +689,17 @@ def should_abort_request(request):
     return False
 
 def _run_spider_process(site_config_id, scrape_event_id):
-    """
-    Runs in a completely fresh process.
-    We initialize Django MANUALLY here before doing anything else.
-    """
     try:
         import django
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'scholarscope.settings')
         django.setup()
-        current_dir = os.path.dirname(os.path.abspath(__file__)) # scholarships/
-        django_root = os.path.dirname(current_dir)               # scholar_scope/
-        project_root = os.path.dirname(django_root)              # SCHOLAR_SCOPE/
-        
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
 
-        # 3. IMPORT SPIDER (Now safe to do)
         from scholarscope_scrapers.scholarscope_scrapers.spiders.scholarships_spider import ScholarshipBatchSpider
-        from scholarships.models import SiteConfig
         settings = {
             # Pipeline Path
             "ITEM_PIPELINES": {
-                "scholarscope_scrapers.scholarscope_scrapers.pipelines.ScholarshipPipeline": 300,
+                'scholarscope_scrapers.scholarscope_scrapers.pipelines.RenewalAndDuplicatePipeline': 200,
+                'scholarscope_scrapers.scholarscope_scrapers.pipelines.ScholarshipPipeline': 300,
             },
             "PLAYWRIGHT_ABORT_REQUEST": should_abort_request,
             # Playwright Handlers
@@ -761,17 +749,12 @@ def _run_spider_process(site_config_id, scrape_event_id):
         print(f"Spider Process Failed: {e}")
         sys.exit(1) # Exit with error code so Celery knows it failed
 
-# ==========================================
-# 2. CELERY TASKS
-# ==========================================
 
 @shared_task(bind=True)
 def scrape_site(self, site_config_id, scrape_event_id=None):
-    # 👇 Local import to prevent AppRegistryNotReady
     from scholarships.models import SiteConfig 
     from django.utils import timezone
 
-    # Spawn the isolated process
     p = multiprocessing.Process(
         target=_run_spider_process, 
         args=(site_config_id, scrape_event_id)
@@ -870,6 +853,7 @@ def finalize_scrape_event(results, scrape_event_id):
 
 @shared_task
 def remove_semantic_duplicates(threshold=0.95):
+    from scholarships.models import Scholarship
     print("Starting Semantic Deduplication...")
     scholarships = list(Scholarship.objects.filter(
         active=True, 
@@ -921,6 +905,7 @@ def remove_semantic_duplicates(threshold=0.95):
 
 @shared_task
 def send_weekly_renewal_notifications():
+    from scholarships.models import WatchedScholarship, Scholarship
     seven_days_ago = timezone.now() - timedelta(days=7)
     
     renewed_scholarships = Scholarship.objects.filter(
