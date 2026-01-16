@@ -87,22 +87,19 @@ def get_cached_recommendations(user, top_n=20):
     if cached:
         return cached["results"]
 
-    # 1️⃣ Get profile + embedding
     profile = getattr(user, "profile", None)
     if not profile or not profile.embedding:
-        # fallback to tag/level match if embedding missing
         return _fallback_recommendations(user)
 
     user_vec = np.array(profile.embedding, dtype=float)
 
-    # 2️⃣ Filter eligible scholarships
     scholarships = Scholarship.objects.filter(
         active=True, embedding__isnull=False
     ).exclude(
         id__in=_get_excluded_scholarships(user)
     )
 
-    # 3️⃣ Compute cosine similarity
+    # Compute cosine similarity
     results = []
     for s in scholarships:
         try:
@@ -111,11 +108,9 @@ def get_cached_recommendations(user, top_n=20):
         except Exception:
             continue
 
-    # 4️⃣ Sort + limit
     results = sorted(results, key=lambda x: x[1], reverse=True)[:top_n]
     scholarships = [s for s, _ in results]
 
-    # 5️⃣ Cache results
     cache.set(
         key,
         {"results": scholarships, "cached_at": now().isoformat()},

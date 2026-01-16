@@ -66,9 +66,21 @@ class Scholarship(models.Model):
     embedding = ArrayField(models.FloatField(), null=True, blank=True)
     scraped_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
     is_recurring = models.BooleanField(default=False, help_text="True if this scholarship reopens annually.")
-    last_renewed_at = models.DateTimeField(null=True, blank=True,help_text="The last time we detected a new cycle for this item.")    
+    last_renewed_at = models.DateTimeField(null=True, blank=True,help_text="The last time we detected a new cycle for this item.")
+    # VERIFICATION_CHOICES = [
+    #     ('PENDING', 'Pending Review'),
+    #     ('ACTIVE', 'Active'),
+    #     ('REJECTED', 'Rejected'),
+    # ]
+    # status = models.CharField(max_length=20, choices=VERIFICATION_CHOICES, default='ACTIVE') 
     status = models.CharField(max_length=20, default="active", choices=[("active", "Active"), ("expired", "Expired")])
-
+    # submitted_by = models.ForeignKey(
+    #     settings.AUTH_USER_MODEL, 
+    #     on_delete=models.SET_NULL, 
+    #     null=True, 
+    #     blank=True,
+    #     related_name='submitted_scholarships'
+    # )
     class Meta:
         unique_together = ('fingerprint', 'url')
 

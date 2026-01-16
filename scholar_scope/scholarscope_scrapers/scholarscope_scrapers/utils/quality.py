@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -282,12 +282,30 @@ class QualityCheck:
         }
 
     @classmethod
-    def _is_valid_date_string(cls, text: str) -> Dict[str, Any]:
-        t = text.strip()
+    def _is_valid_date_string(cls, value: Any) -> Dict[str, Any]:
+        if isinstance(value, (date, datetime)):
+            return {
+                'valid': True,
+                'confidence': 1.0,
+                'reason': "Valid Date Object",
+                'severity': None
+            }
+
+        # 2. Reject non-strings (e.g., None, Integers)
+        if not isinstance(value, str):
+            return {
+                'valid': False,
+                'confidence': 0.0,
+                'reason': f"Invalid data type: {type(value)}",
+                'severity': 'critical'
+            }
+
+        # 3. Validate Strings (Existing Logic)
+        t = value.strip()
         t_lower = t.lower()
         
         # Check for garbage
-        is_garbage, garbage_reason = cls._is_generic_garbage(text)
+        is_garbage, garbage_reason = cls._is_generic_garbage(t)
         if is_garbage:
             return {
                 'valid': False,
@@ -325,14 +343,14 @@ class QualityCheck:
         
         confidence = 0.5
         
-        # Check for specific date patterns (high confidence)
+        
         date_patterns = [
             (r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', 0.95),  # 12/31/2024
             (r'\d{4}[/-]\d{1,2}[/-]\d{1,2}', 0.95),     # 2024-12-31
-            (r'\b\d{1,2}\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}\b', 0.95),  # 15 January 2024
-            (r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4}\b', 0.95),  # January 15, 2024
-            (r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\.?\s+\d{1,2},?\s+\d{4}\b', 0.9),  # Jan 15, 2024
-            (r'\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\.?\s+\d{4}\b', 0.9),  # 15 Jan 2024
+            (r'\b\d{1,2}\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}\b', 0.95),
+            (r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4}\b', 0.95),
+            (r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\.?\s+\d{1,2},?\s+\d{4}\b', 0.9),
+            (r'\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\.?\s+\d{4}\b', 0.9),
         ]
         
         for pattern, pattern_confidence in date_patterns:
@@ -342,7 +360,7 @@ class QualityCheck:
         
         # Month names boost confidence
         month_names = ['january', 'february', 'march', 'april', 'may', 'june',
-                      'july', 'august', 'september', 'october', 'november', 'december']
+                        'july', 'august', 'september', 'october', 'november', 'december']
         month_abbrevs = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec']
         
         if any(month in t_lower for month in month_names):
@@ -352,7 +370,7 @@ class QualityCheck:
         
         # Valid relative/rolling dates
         relative_dates = ['ongoing', 'rolling', 'rolling deadline', 'varies', 'annual', 'annually', 
-                         'quarterly', 'open', 'continuous']
+                            'quarterly', 'open', 'continuous']
         if any(rd in t_lower for rd in relative_dates):
             confidence = 0.8
         
@@ -678,20 +696,15 @@ class QualityCheck:
         failed_fields = quality_report.get('failed_fields', [])
         score = quality_report.get('quality_score', 1.0)
 
-        # Condition 1: The "Identity" is missing
-        # If we don't have a valid Title or Description, the item is fundamentally broken.
+        
         if "title" in critical_failures:
             return True
         if "description" in critical_failures:
             return True
 
-        # Condition 2: Too many holes
-        # If 3 or more fields failed validation, it's cleaner to regenerate than patch.
         if len(failed_fields) >= 3:
             return True
 
-        # Condition 3: Overall Garbage
-        # If the weighted quality score is abysmal (e.g., < 0.4)
         if score < 0.4:
             return True
 

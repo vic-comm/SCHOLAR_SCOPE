@@ -118,9 +118,13 @@ class ScholarshipBatchSpider(scrapy.Spider):
             ]
 
         for pattern in patterns:
-            match = re.search(pattern, page_text, re.IGNORECASE)
-            if match:
+            iterator = re.finditer(pattern, page_text, re.IGNORECASE)
+            
+            for match in iterator:
                 date_str = match.group(1).strip()
+                
+                if len(date_str) < 4: continue
+                
                 try:
                     dt = dateparser.parse(
                         date_str, 
@@ -130,9 +134,9 @@ class ScholarshipBatchSpider(scrapy.Spider):
                         self.logger.info(f"Regex Found {date_type.upper()} Date: {dt.date()} (Match: '{date_str}')")
                         return dt.date()
                 except:
-                    continue
-        return None
-    
+                    continue   
+        return None 
+       
     def extract_section_content(self, response, selector_raw):
         if not selector_raw: return None
         
@@ -175,6 +179,8 @@ class ScholarshipBatchSpider(scrapy.Spider):
 
     async def parse_list(self, response):
         cfg = self.site_config
+        current_page = response.meta.get('page_number', 1)
+        MAX_PAGES_TO_CHECK = 2 
         list_item_sel = cfg.list_item_selector
         link_sel = cfg.link_selector
         title_sel = cfg.title_selector
@@ -261,6 +267,38 @@ class ScholarshipBatchSpider(scrapy.Spider):
             },
                 callback=self.parse_detail,
             )
+        
+
+        if current_page < MAX_PAGES_TO_CHECK:
+            next_page = (
+                response.css('a.next::attr(href)').get() or 
+                response.css('a.next.page-numbers::attr(href)').get() or
+                response.css('a[rel="next"]::attr(href)').get() or
+                response.css('.pagination a.active + a::attr(href)').get()
+            )
+
+            if next_page:
+                next_url = response.urljoin(next_page)
+                if self.consecutive_duplicates >= 3:
+                    self.logger.info("Stopping pagination: Too many duplicates found on this page.")
+                    return
+
+                self.logger.info(f"Following pagination to Page {current_page + 1}: {next_url}")
+                
+                yield scrapy.Request(
+                    next_url,
+                    callback=self.parse_list,
+                    meta={
+                        "playwright": True,
+                        "playwright_page_goto_kwargs": {
+                            "wait_until": "commit", # Fast loading
+                            "timeout": 90000,
+                        },
+                        "page_number": current_page + 1 # Increment counter
+                    }
+                )
+            else:
+                self.logger.info("🚫 Pagination stopped: No 'Next' link found.")
     
 
     async def parse_detail(self, response):
@@ -269,7 +307,7 @@ class ScholarshipBatchSpider(scrapy.Spider):
         def safe_parse_date(selector, date_type="end"):
             raw = self.extract_section_content(response, selector)
             if raw:
-                self.logger.debug(f"📅 RAW_DATE ({date_type}): '{raw}'")
+                self.logger.debug(f"RAW_DATE ({date_type}): '{raw}'")
                 try:
                     dt = dateparser.parse(raw, settings={'STRICT_PARSING': False, 'PREFER_DATES_FROM': 'future'})
                     if dt: 

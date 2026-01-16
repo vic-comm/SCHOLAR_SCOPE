@@ -1,22 +1,14 @@
-from django.shortcuts import render, redirect, HttpResponseRedirect, get_object_or_404, HttpResponse
+from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
-from django.views import generic
 from allauth.account.views import SignupView
-from .models import Scholarship, Bookmark, Application, Profile, SiteConfig
-from django.contrib.auth.mixins import LoginRequiredMixin
+from .models import Scholarship, Bookmark, Application, Profile, SiteConfig, WatchedScholarship
 from django.contrib.postgres.search import SearchVector, SearchRank, SearchQuery
 from django.db.models import Q
-from .forms import ScholarshipModelForm, ApplicationStatusUpdateForm, ProfileForm
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
 from .serializers import (ScholarshipSerializer, UserDashBoardSerializer, ApplicationStatusSerializer, 
                           ApplicationSerializer, BookmarkSerializer, ProfileUpdateSerializer, SiteConfigSerializer)
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework import viewsets, status
-from django.contrib import messages
-from django.core.paginator import Paginator
+from rest_framework.decorators import action
+from rest_framework import viewsets
 from django.utils import timezone
 from django.db.models import Q, Count
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
@@ -24,8 +16,6 @@ from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from django.conf import settings
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 from .utils import get_cached_recommendations
 from .serializers import ProfileSerializer
 from rest_framework import permissions
@@ -34,65 +24,76 @@ class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
     callback_url = settings.GOOGLE_OAUTH_CALLBACK_URL
     client_class = OAuth2Client
-# Create your views here.
+
+
 class CustomSignUpView(SignupView):
     def get_success_url(self):
         return reverse_lazy('update_profile')
-
-class ScholarshipList(LoginRequiredMixin, generic.View):
-    template_name = 'scholarships/list.html'
-
-    def get(self, request):
-        scholarships = Scholarship.objects.all()
-        if request.GET.get('q'):
-            query = request.GET.get('q')
-            queryset = Scholarship.objects.all()
-            scholarships = queryset.filter(
-                Q(title__icontains=query) |
-                Q(description__icontains=query) |
-                Q(tags__name__icontains=query)
-            ).distinct().order_by('-created_at')
-        if request.GET.get('level'):
-            level = request.GET.get('level')
-            scholarships = Scholarship.objects.filter(level__level__iexact=level)
-        paginator = Paginator(scholarships, 10)
-        page = int(request.GET.get('page', 1))
-        try:
-            scholarships = paginator.page(page)
-        except:
-            return HttpResponse('')
-        bookmarks = Bookmark.objects.filter(user=request.user).values_list("scholarship_id", flat=True)
-        context = {'scholarships':scholarships, 'page':page, 'bookmarked_ids':set(bookmarks)}
-        if request.htmx:
-            return render(request, 'scholarships/loop_scholarships.html', context)
-        return render(request, self.template_name, context)
     
 class ScholarshipViewset(viewsets.ModelViewSet):
     serializer_class = ScholarshipSerializer
     permission_classes = [IsAuthenticated]
     
     def get_permissions(self):
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['list', 'retrieve', 'details']:
+            return [AllowAny()] 
+        elif self.action in ['bookmark_scholarship', 'unbookmark', 'save', 'unsave_scholarship', 'apply']:
             return [IsAuthenticated()]
         else:
             return [IsAdminUser()]
     
+    # def get_queryset(self):
+    #     queryset = Scholarship.objects.all()
+
+    #     query = self.request.query_params.get("q")
+    #     level = self.request.query_params.get("level")
+    #     tag = self.request.query_params.get("tag")
+
+    #     if level:
+    #         queryset = queryset.filter(level__level__iexact=level)
+    #     if tag:
+    #         queryset = queryset.filter(tags__name__iexact=tag)
+
+    #     if query:
+    #         search_vector = (
+    #             SearchVector("title", weight="A") +
+    #             SearchVector("description", weight="B") +
+    #             SearchVector("tags__name", weight="C")
+    #         )
+    #         search_query = SearchQuery(query)
+            
+    #         queryset = (
+    #             queryset
+    #             .annotate(rank=SearchRank(search_vector, search_query))
+    #             .filter(rank__gte=0.1) 
+    #             .order_by("-rank", "-created_at") 
+    #             .distinct()
+    #         )
+    #     else:
+    #         queryset = queryset.order_by("-created_at")
+
+    #     return queryset
     def get_queryset(self):
         queryset = Scholarship.objects.all()
+        
         query = self.request.query_params.get('q')
         level = self.request.query_params.get('level') 
         tag = self.request.query_params.get('tag')        
+        
         if query:
-            scholarships = queryset.filter(
+            queryset = queryset.filter(
                 Q(title__icontains=query) |
                 Q(description__icontains=query) |
                 Q(tags__name__icontains=query)
-            ).distinct().order_by('-created_at')
+            ).distinct()
+            
         if level:
-            scholarships = Scholarship.filter(level__level__iexact=level)
+            queryset = queryset.filter(level__level__iexact=level)
+            
         if tag:
-            scholarships = Scholarship.objects.filter(tag__name__iexact=tag)
-        return scholarships.order_by('-created_at')
+            queryset = queryset.filter(tags__name__iexact=tag)
+            
+        return queryset.order_by('-created_at')
     
     @action(detail=True, methods=['post'])
     def bookmark_scholarship(self, request, pk=None):
@@ -140,9 +141,77 @@ class ScholarshipViewset(viewsets.ModelViewSet):
         application, created = Application.objects.get_or_create(user=user, scholarship=scholarship)
         return Response({'message':"Application created", 'scholarship_link':scholarship.link, 'already_applied':not created})
 
+    @action(detail=True, methods=['post'])
+    def toggle_watch_scholarship(self, request, pk=None):
+        try:
+            scholarship = Scholarship.objects.get(pk=pk)
+        except Scholarship.DoesNotExist:
+            return Response({"error": "Scholarship not found"}, status=404)
+
+        watch_instance, created = WatchedScholarship.objects.get_or_create(
+            user=request.user,
+            scholarship=scholarship
+        )
+
+        if not created:
+            watch_instance.delete()
+            return Response({"status": "unwatched", "message": "You are no longer watching this scholarship."})
+
+        return Response({
+            "status": "watched", 
+            "message": "You will be notified when this scholarship reopens next year."
+        })
+    
+    # def normalize_url(self, url):
+    #     """Removes query params like ?utm_source=... to catch duplicates"""
+    #     if not url: return ""
+    #     parsed = urlparse(url)
+    #     return urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
+
+    # def create(self, request, *args, **kwargs):
+    #     raw_url = request.data.get('link') or request.data.get('url')
+    #     clean_url = self.normalize_url(raw_url)
+        
+    #     # 1. Try to find existing record
+    #     scholarship = Scholarship.objects.filter(url=clean_url).first()
+        
+    #     if scholarship:
+    #         # === MERGE STRATEGY ===
+    #         # If the DB has empty fields but the User provided data, fill them in.
+    #         has_changes = False
+            
+    #         fields_to_check = ['eligibility', 'requirements', 'reward', 'description']
+    #         for field in fields_to_check:
+    #             new_val = request.data.get(field)
+    #             current_val = getattr(scholarship, field)
+                
+    #             # If DB is empty/short AND User provided longer text, update it
+    #             if new_val and (not current_val or len(new_val) > len(current_val)):
+    #                 setattr(scholarship, field, new_val)
+    #                 has_changes = True
+            
+    #         if has_changes:
+    #             scholarship.status = 'PENDING' # Re-flag for AI review since data changed
+    #             scholarship.save()
+    #             process_scholarship_with_ai.delay(scholarship.id) # Trigger Celery Task
+    #             return Response({"message": "Scholarship updated with new details!"}, status=status.HTTP_200_OK)
+    #         else:
+    #             return Response({"message": "Scholarship already exists and is up to date."}, status=status.HTTP_200_OK)
+
+    #     else:
+    #         # === CREATE STRATEGY ===
+    #         # Standard creation, but set status to PENDING
+    #         serializer = self.get_serializer(data=request.data)
+    #         serializer.is_valid(raise_exception=True)
+    #         instance = serializer.save(status='PENDING', url=clean_url)
+            
+    #         # Trigger AI to clean this new raw entry
+    #         process_scholarship_with_ai.delay(instance.id)
+            
+    #         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 def recommend_scholarships(request):
     profile = request.user.profile
-    # user_vec = get_profile_embedding(profile)
     bookmarked_ids = Bookmark.objects.filter(user=request.user).values_list('scholarship_id', flat=True)
     applications_ids = Application.objects.filter(user=request.user).values_list('scholarship_id', flat=True)
 
@@ -151,108 +220,6 @@ def recommend_scholarships(request):
     .annotate(match_count=Count("tags", filter=Q(tags__in=profile.tags.all()))).order_by("-match_count", "end_date").distinct())
 
     return result
-
-class ScholarshipDetail(LoginRequiredMixin, generic.DetailView):
-    model = Scholarship
-    template_name = 'scholarships/detail2.html'
-    context_object_name = 'scholarship'
-
-    def get_queryset(self):
-        return Scholarship.objects.filter(active=True)
-    
-    def get_context_data(self, **kwargs): 
-        scholarship = self.object
-        context = super().get_context_data(**kwargs)
-        similar_scholarships = Scholarship.objects.filter(Q(tags__in=scholarship.tags.all()) | Q(level__in=scholarship.level.all())).exclude(id=scholarship.id)\
-                                .annotate(match_count = Count('tags', filter=Q(tags__in=scholarship.tags.all()))).order_by('-match_count', 'end_date').distinct()[:10]
-        recommended_scholarships = recommend_scholarships(self.request)[:5]
-        context['similar_scholarships'] = similar_scholarships
-        context['recommended_scholarships'] = recommended_scholarships
-
-        return context
-
-class CreateScholarship(LoginRequiredMixin, generic.CreateView):
-    model = Scholarship
-    template_name = 'scholarships/create.html'
-    form_class = ScholarshipModelForm
-
-    def get_success_url(self):
-        return redirect('scholarship_list')
-
-class UpdateScholarship(LoginRequiredMixin, generic.UpdateView):
-    model = Scholarship
-    template_name = 'scholarships/update.html'
-    form_class = ScholarshipModelForm
-
-    def get_success_url(self):
-        return redirect('scholarship_detail', kwargs={'pk':self.get_object().id})
-
-class DeleteScholarship(LoginRequiredMixin, generic.DeleteView):
-    model = Scholarship
-
-    def get_success_url(self):
-        return reverse_lazy('scholarship_list')
-
-@login_required
-def bookmark(request, sch_id):
-    scholarship = get_object_or_404(Scholarship, id=sch_id)
-    Bookmark.objects.get_or_create(user=request.user, scholarship=scholarship)
-    bookmarked_ids = Bookmark.objects.filter(user=request.user).values_list("scholarship_id", flat=True)
-    return render(request, "partials/bookmark_button.html", {"scholarship": scholarship, 'bookmarked_ids':bookmarked_ids})
-
-@login_required
-def remove_bookmark(request, sch_id):
-    scholarship = get_object_or_404(Scholarship, id=sch_id)
-    # Bookmark.objects.filter(user=request.user, scholarship=scholarship).delete()
-    request.user.bookmarked_scholarships.remove(scholarship)
-    bookmarked_ids = Bookmark.objects.filter(user=request.user).values_list("scholarship_id", flat=True)
-    return render(request, "partials/bookmark_button.html", {"scholarship": scholarship, 'bookmarked_ids':bookmarked_ids})
-
-@login_required
-def apply(request, sch_id):
-    user = request.user
-    scholarship = get_object_or_404(Scholarship, id=sch_id)
-    application, created = Application.objects.get_or_create(user=user, scholarship=scholarship)
-    return HttpResponseRedirect(scholarship.link)
-    
-@login_required
-def unsave_scholarship(request, app_id):
-   application = get_object_or_404(Application, user=request.user, id=app_id)
-   application.delete()
-   return redirect('dashboard')
-
-
-@login_required
-def save_scholarship(request, sch_id):
-    user = request.user
-    scholarship = get_object_or_404(Scholarship, id=sch_id)
-    application, created = Application.objects.get_or_create(user=user, scholarship=scholarship)
-    return redirect("scholarship_detail", scholarship.id)
-
-class ApplicationStatusUpdateView(APIView):
-    serializer_class = ApplicationStatusSerializer
-    permission_classes = [IsAuthenticated]
-
-    def patch(self, request, id):
-        application =Application.objects.get(id=id)
-        serializer = self.serializer_class(application, data=request.data, partial=True)
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-@login_required
-def change_application_status(request, app_id):
-    application = get_object_or_404(Application, id=app_id)
-    if request.method == 'POST':
-        form = ApplicationStatusUpdateForm(request.POST, instance=application)
-        if form.is_valid():
-            form.save()
-            return redirect('dashboard')
-    else:
-        form = ApplicationStatusUpdateForm(instance=application)
-    return render(request, 'scholarship/dashboard2.html', {'status_form':form})
 
 class ProfileViewSet(viewsets.ModelViewSet):
     serializer_class = ProfileSerializer
@@ -330,73 +297,6 @@ class UserViewset(viewsets.ViewSet):
         return Response(serializer.data)
 
 
-
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def user_dashboard(request):
-    user = request.user
-
-    applied_scholarships = user.applied_scholarships.all()
-    bookmarked_scholarships = user.bookmarked_scholarships.all()
-
-    recent_applications = Application.objects.filter(
-        user=user
-    ).select_related('scholarship').order_by('-submitted_at')[:5]
-
-    recent_bookmarks = Bookmark.objects.filter(
-        user=user
-    ).select_related('scholarship').order_by('-bookmarked_at')[:10]
-
-    recommended_scholarships = recommend_scholarships(request)[:5]
-
-    upcoming_deadlines = Scholarship.objects.filter(
-        Q(applications__user=user) | Q(bookmarks__user=user),
-        end_date__gte=timezone.now()
-    ).order_by('end_date')[:5]
-
-    application_status_counts = Application.objects.filter(user=user).values('status').annotate(total=Count('id'))
-
-    recent_scholarships = Scholarship.objects.order_by('-created_at')[:5]
-
-    stats = {
-        'total_applications': applied_scholarships.count(),
-        'total_bookmarks': bookmarked_scholarships.count(),
-        'pending_applications': Application.objects.filter(user=user, status='pending').count(),
-        'accepted_applications': Application.objects.filter(user=user, status='accepted').count(),
-        'rejected_applications': Application.objects.filter(user=user, status='rejected').count(),
-        'submitted_applications': Application.objects.filter(user=user, status='submitted').count(),
-    }
-
-    data = {
-        'recent_applications': ApplicationSerializer(recent_applications, many=True).data,
-        'recent_bookmarks': BookmarkSerializer(recent_bookmarks,many=True).data,
-        'recommended_scholarships': ScholarshipSerializer(recommended_scholarships, many=True).data,
-        'upcoming_deadlines': ScholarshipSerializer(upcoming_deadlines, many=True).data,
-        'application_status_counts': application_status_counts,
-        'recent_scholarships': ScholarshipSerializer(recent_scholarships, many=True).data,
-        'stats': stats,
-        'applied_scholarships': ScholarshipSerializer(applied_scholarships, many=True).data,
-        'bookmarked_scholarships': ScholarshipSerializer(bookmarked_scholarships, many=True).data
-    }
-
-    serializer = UserDashBoardSerializer(instance=data)
-    return Response(serializer.data)
-
-@login_required
-def update_profile(request):
-    if request.method == 'POST':
-        form = ProfileForm(request.POST, instance=request.user.profile)
-        if form.is_valid():
-            profile = form.save(commit=False)
-            profile.user = request.user
-            profile.save()
-        return redirect('dashboard')
-    form = ProfileForm(instance=request.user.profile)
-    return render(request, 'scholarships/profile.html', {'form': form})
-
-
     
 class SiteConfigViewset(viewsets.ModelViewSet):
     serializer_class = SiteConfigSerializer
@@ -413,33 +313,9 @@ class SiteConfigViewset(viewsets.ModelViewSet):
 
 
 
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from .models import WatchedScholarship, Scholarship
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def toggle_watch_scholarship(request, pk):
-    try:
-        scholarship = Scholarship.objects.get(pk=pk)
-    except Scholarship.DoesNotExist:
-        return Response({"error": "Scholarship not found"}, status=404)
 
-    # Toggle logic: If exists, delete. If not, create.
-    watch_instance, created = WatchedScholarship.objects.get_or_create(
-        user=request.user,
-        scholarship=scholarship
-    )
 
-    if not created:
-        watch_instance.delete()
-        return Response({"status": "unwatched", "message": "You are no longer watching this scholarship."})
-
-    return Response({
-        "status": "watched", 
-        "message": "You will be notified when this scholarship reopens next year."
-    })
 
 
 

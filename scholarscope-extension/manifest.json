@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "ScholarScope Companion",
+  "version": "1.0.0",
+  "description": "Collect scholarship data from multiple pages and save to your dashboard.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",       
+    "contextMenus",    
+    "storage",         
+    "scripting"        
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*" 
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -12,15 +12,21 @@ class ScholarshipSerializer(serializers.ModelSerializer):
     is_saved = serializers.SerializerMethodField()
     class Meta:
         model = Scholarship
-        fields = ['id','title','start_date','end_date','tags','description','reward','active','link', 'eligibility', 'is_bookmarked']
+        fields = ['id','title','start_date','end_date','tags','description','reward','active','link', 'eligibility', 'is_bookmarked', 'is_saved']
     
     def get_is_bookmarked(self, obj):
-        user = self.context['request'].user
-        return Bookmark.objects.filter(user=user, scholarship=obj).exists()
+        request = self.context['request']
+        if request.user.is_authenticated:
+            user = self.context['request'].user
+            return Bookmark.objects.filter(user=user, scholarship=obj).exists()
+        return False
     
     def get_is_saved(self, obj):
-        user = self.context['request'].user
-        return Application.objects.filter(user=user, scholarship=obj).exists() 
+        request = self.context['request']
+        if request.user.is_authenticated:
+            user = self.context['request'].user
+            return Application.objects.filter(user=user, scholarship=obj).exists()
+        return False
 
 class ApplicationSerializer(serializers.ModelSerializer):
     class Meta:

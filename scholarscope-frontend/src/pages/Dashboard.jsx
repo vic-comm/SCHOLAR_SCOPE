@@ -21,6 +21,32 @@ const Dashboard = () => {
     fetchDashboard();
   }, []);
 
+  async function handleBookmark() {
+        const previousState = scholarship.is_bookmarked;
+        setScholarship(prev => ({ ...prev, is_bookmarked: !previousState }));
+
+        try {
+            if (previousState) {
+                await api.post(`/scholarships/${id}/unbookmark/`);
+            } else {
+                await api.post(`/scholarships/${id}/bookmark_scholarship/`);
+            }
+        } catch (err) {
+            console.error("Bookmark failed:", err);
+            setScholarship(prev => ({ ...prev, is_bookmarked: previousState }));
+        }
+    }
+
+    
+    async function handleApply() {
+        window.open(scholarship.link, '_blank');
+        try {
+            await api.post(`/scholarships/${id}/save/`);
+        } catch (err) {
+            console.error("Failed to track application:", err);
+        }
+    }
+
   if (loading) return <div className="p-6 text-center">Loading dashboard...</div>;
   if (!dashboard) return <div className="p-6 text-center">No data available.</div>;
 
@@ -112,7 +138,7 @@ const Dashboard = () => {
                   Apply
                 </button>
                 <button
-                  onClick={() => handleUnbookmark(s.id)}
+                  onClick={() => handleBookmark(s.id)}
                   className="p-2 bg-red-100 dark:bg-red-800/50 text-red-600 dark:text-red-400 rounded-lg"
                 >
                   🗑
