@@ -1,6 +1,7 @@
 import React, {useState, useEffect} from 'react'
 import ScholarshipCard from '../components/ScholarshipCard'
 import Navbar from '../components/Navbar'
+import { Link } from 'react-router-dom';
 import api from '../api'
 
 export default function Home(){
@@ -36,6 +37,9 @@ export default function Home(){
   };
 
   const handleBookmarkToggle = async(id, is_bookmarked) => {
+
+    e.preventDefault();
+    e.stopPropagation();
     // Optimistically update UI
     setScholarships(scholarships => 
       scholarships.map(s => 
@@ -75,11 +79,16 @@ export default function Home(){
         ) : scholarships.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 p-4 pt-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {scholarships.map((scholarship) => (
-              <ScholarshipCard
-                key={scholarship.id}
-                scholarship={scholarship}
-                onToggleBookmark={handleBookmarkToggle}
-              />
+              <Link 
+                key={scholarship.id} 
+                to={`/scholarships/${scholarship.id}`}
+                className="block h-full" // block ensures it wraps correctly, h-full keeps height uniform
+              >
+                <ScholarshipCard
+                  scholarship={scholarship}
+                  onToggleBookmark={handleBookmarkToggle}
+                />
+              </Link>
             ))}
           </div>
         ) : (

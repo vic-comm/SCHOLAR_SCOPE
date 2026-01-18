@@ -1,110 +1,150 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Save, Trash2, Loader2, CheckCircle, ExternalLink } from 'lucide-react';
-import './App.css'; // We'll add some basic CSS in Step 7
+// import axios from 'axios'; // You can remove this if using 'api'
+import { Save, Trash2, Loader2, CheckCircle, ExternalLink, LogOut } from 'lucide-react'; // 👈 Added LogOut here
+import './App.css'; 
+import Login from './Login.jsx'; // Capitalized Login convention
+import api from './api'; // Ensure this path is correct for your extension structure
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  
+  // Initialize as 'ready' so we don't block the Login screen. 
+  // We'll set it to 'loading' only if we actually start scraping.
+  const [status, setStatus] = useState('ready'); 
+  const [errorMessage, setErrorMessage] = useState('');
+
   const [formData, setFormData] = useState({
     title: '',
-    link: '', // Django expects 'link', not 'url'
+    link: '', 
     description: '',
     eligibility: '',
     requirements: '',
     reward: '',
   });
   
-  const [status, setStatus] = useState('loading'); // loading | ready | saving | success | error
-  const [errorMessage, setErrorMessage] = useState('');
-
-  // 1. Initialize: Load Draft + Scrape Metadata
+  // 1. Check Authentication on Mount
   useEffect(() => {
-    // A. Check our "Basket" (Storage)
+    chrome.storage.local.get(['auth_token'], (result) => {
+      if (result.auth_token) {
+        setIsAuthenticated(true);
+      }
+      setCheckingAuth(false);
+    });
+  }, []);
+
+  // 2. Load Draft + Scrape Metadata (Only runs once)
+  useEffect(() => {
+    // Only scrape if we are essentially logged in or about to be (optional optimization)
+    setStatus('loading'); 
+    
     chrome.storage.local.get(['draft'], (result) => {
       let draft = result.draft || {};
 
-      // B. If we don't have a Title/Link yet, ask the page
+      // If we don't have a Title/Link yet, ask the page
       if (!draft.title || !draft.link) {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (!tabs[0]?.id) return;
+          if (!tabs[0]?.id) {
+             setStatus('ready'); 
+             return;
+          }
           
           chrome.tabs.sendMessage(tabs[0].id, { action: "SCRAPE_METADATA" }, (response) => {
-            // If the content script isn't ready (e.g. browser settings page), response might be undefined
             if (chrome.runtime.lastError || !response) {
                console.log("Scraper not ready or page not supported.");
             } else {
-               // Merge page data with our draft
                draft = { 
                  ...draft, 
                  title: draft.title || response.title,
                  link: draft.link || response.url,
                  description: draft.description || response.description
                };
-               
-               // Save the merged version back to storage so we remember it
                chrome.storage.local.set({ draft });
             }
-            // Update UI
             setFormData(prev => ({ ...prev, ...draft }));
             setStatus('ready');
           });
         });
       } else {
-        // We already have data, just show it
         setFormData(prev => ({ ...prev, ...draft }));
         setStatus('ready');
       }
     });
   }, []);
 
-  // 2. Handle Input Changes
+  const handleLogout = () => {
+    chrome.storage.local.remove('auth_token');
+    setIsAuthenticated(false);
+  };
+
+  const handleClear = () => {
+    chrome.storage.local.remove('draft');
+    setFormData({ title: '', link: '', description: '', eligibility: '', requirements: '', reward: '' });
+    window.location.reload(); 
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     const updated = { ...formData, [name]: value };
     setFormData(updated);
-    // Auto-save to local storage as you type (prevent data loss)
     chrome.storage.local.set({ draft: updated });
   };
 
-  // 3. Clear Draft (Start Over)
-  const handleClear = () => {
-    chrome.storage.local.remove('draft');
-    setFormData({ title: '', link: '', description: '', eligibility: '', requirements: '', reward: '' });
-    // Re-trigger scrape metadata
-    window.location.reload(); 
-  };
-
-  // 4. Submit to Django
   const handleSave = async () => {
     setStatus('saving');
     setErrorMessage('');
 
-    try {
-      // NOTE: Ensure your Django server is running!
-      // If using JWT, you'll need to handle auth headers here. 
-      // For now, we assume standard session or you are testing locally.
-      const response = await axios.post('http://127.0.0.1:8000/api/scholarships/', {
-        ...formData,
-        active: true, // Default to active
-        // You might need to add default dates or tags if your backend requires them
-      });
-
-      if (response.status === 201) {
-        setStatus('success');
-        chrome.storage.local.remove('draft'); // Clear basket on success
+    chrome.storage.local.get(['auth_token'], async (result) => {
+      const token = result.auth_token;
+      
+      if (!token) {
+        setStatus('error');
+        setErrorMessage("You are logged out.");
+        setIsAuthenticated(false);
+        return;
       }
-    } catch (error) {
-      console.error(error);
-      setStatus('error');
-      setErrorMessage("Failed to save. Is the server running?");
-    }
+
+      try {
+        const response = await api.post('/scholarships/', 
+          { ...formData, active: true },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`, 
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (response.status === 201 || response.status === 200) {
+          setStatus('success');
+          chrome.storage.local.remove('draft');
+        }
+      } catch (error) {
+        console.error(error);
+        setStatus('error');
+        if (error.response?.status === 401) {
+            setErrorMessage("Session expired. Please log in again.");
+            handleLogout();
+        } else {
+            setErrorMessage("Failed to save. Is server running?");
+        }
+      }
+    });
   };
 
-  // --- RENDER HELPERS ---
+  // --- RENDER LOGIC (Reordered for better UX) ---
 
-  if (status === 'loading') {
+  // 1. First, check if we are still figuring out if the user is logged in
+  if (checkingAuth) {
     return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   }
 
+  // 2. If definitely not logged in, show Login immediately
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={() => setIsAuthenticated(true)} />;
+  }
+
+  // 3. If saving was successful, show success screen
   if (status === 'success') {
     return (
       <div className="p-6 text-center w-80 flex flex-col items-center animate-in fade-in">
@@ -112,13 +152,18 @@ function App() {
         <h2 className="text-xl font-bold text-slate-800">Saved!</h2>
         <p className="text-slate-500 text-sm mb-6">Scholarship added to dashboard.</p>
         <button 
-          onClick={() => window.close()} // Close the popup
+          onClick={() => window.close()} 
           className="bg-slate-100 text-slate-700 px-6 py-2 rounded-full font-medium hover:bg-slate-200"
         >
           Close
         </button>
       </div>
     );
+  }
+
+  // 4. Finally, if we are authenticated but the scraper is loading
+  if (status === 'loading') {
+    return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   }
 
   return (
@@ -128,16 +173,19 @@ function App() {
       <div className="bg-white p-4 border-b flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2">
           <span className="font-bold text-lg text-blue-600">ScholarScope</span>
-          <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full font-bold">DRAFT</span>
         </div>
-        <button onClick={handleClear} className="text-slate-400 hover:text-red-500" title="Clear Draft">
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleClear} className="text-slate-400 hover:text-red-500" title="Clear Draft">
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button onClick={handleLogout} className="text-slate-400 hover:text-blue-500" title="Sign Out">
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Form */}
       <div className="p-4 space-y-4 flex-1 overflow-y-auto max-h-[500px]">
-        
         {status === 'error' && (
           <div className="bg-red-50 text-red-600 p-3 rounded text-sm border border-red-200">
             {errorMessage}

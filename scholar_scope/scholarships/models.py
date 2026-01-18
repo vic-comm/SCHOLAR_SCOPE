@@ -323,3 +323,36 @@ class ScholarshipCycle(models.Model):
     batch_year = models.IntegerField(db_index=True)
     status = models.CharField(max_length=20, default="active")
     scraped_at = models.DateTimeField(auto_now_add=True)
+
+class ScrapeSubmission(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    scholarship = models.ForeignKey(Scholarship, on_delete=models.SET_NULL, null=True, blank=True)
+    link = models.URLField(max_length=1000)
+    title = models.CharField(max_length=500)
+    raw_data = models.JSONField()
+    
+    status = models.CharField(
+        max_length=20, 
+        choices=[('PENDING', 'Pending'), ('APPROVED', 'Approved'), ('REJECTED', 'Rejected')],
+        default='PENDING'
+    )
+    VERIFICATION_CHOICES = [
+        ('PENDING', 'Pending Review'),
+        ('APPROVED', 'Approved (Public)'),
+        ('REJECTED', 'Rejected'),
+    ]
+    status = models.CharField(max_length=20, choices=VERIFICATION_CHOICES, default='PENDING')
+    APPLICATION_STATUS_CHOICES = [
+        ('pending', 'Pending'),      
+        ('submitted', 'Submitted'),  
+        ('rejected', 'Rejected'),    
+        ('accepted', 'Accepted'),]
+    application_status = models.CharField(
+        max_length=20, 
+        choices=APPLICATION_STATUS_CHOICES, 
+        default='pending')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        ordering = ['-created_at']

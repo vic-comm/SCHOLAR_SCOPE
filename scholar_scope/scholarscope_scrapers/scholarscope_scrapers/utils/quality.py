@@ -16,7 +16,8 @@ class QualityCheck:
             "home", "scholarships", "search results", "all scholarships", 
             "welcome", "index", "page 1", "unknown", "untitled", "scholarship",
             "scholarship opportunity", "opportunity", "financial aid",
-            "scholarship search", "find scholarships", "browse scholarships"
+            "scholarship search", "find scholarships", "browse scholarships",
+            "sign in", "my account", "dashboard", "forgot password", "reset password", "access portal"
         },
         "reward": {
             "varies", "see details", "check website", "n/a", "unknown", 
@@ -673,6 +674,11 @@ class QualityCheck:
             quality_score < 0.6 or  # Overall quality too low
             len(failed_fields) >= len(critical_fields) * 0.3  # 30%+ fields failed
         )
+
+        is_garbage_content = False
+        desc_result = results.get('description')
+        if desc_result and not desc_result['valid'] and desc_result['severity'] == 'critical':
+            is_garbage_content = True
         
         return {
             'quality_score': round(quality_score, 3),
@@ -683,7 +689,8 @@ class QualityCheck:
             'low_confidence_fields': low_confidence_fields,
             'needs_llm': needs_llm,
             'llm_priority': 'high' if len(critical_failures) > 0 else 'medium' if needs_llm else 'low',
-            'details': results
+            'details': results,
+            'is_garbage_content': is_garbage_content,
         }
     
     @classmethod
@@ -700,7 +707,7 @@ class QualityCheck:
         if "title" in critical_failures:
             return True
         if "description" in critical_failures:
-            return True
+            return False
 
         if len(failed_fields) >= 3:
             return True

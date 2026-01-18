@@ -1,10 +1,12 @@
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
 from allauth.account.views import SignupView
-from .models import Scholarship, Bookmark, Application, Profile, SiteConfig, WatchedScholarship
+from .models import Scholarship, Bookmark, Application, Profile, SiteConfig, WatchedScholarship, ScrapeSubmission
+from .tasks import process_new_submission
+from rest_framework import status
 from django.contrib.postgres.search import SearchVector, SearchRank, SearchQuery
 from django.db.models import Q
-from .serializers import (ScholarshipSerializer, UserDashBoardSerializer, ApplicationStatusSerializer, 
+from .serializers import (ScholarshipSerializer, UserDashBoardSerializer, ApplicationStatusSerializer, ScrapeSubmissionSerializer,
                           ApplicationSerializer, BookmarkSerializer, ProfileUpdateSerializer, SiteConfigSerializer)
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -20,11 +22,16 @@ from .utils import get_cached_recommendations
 from .serializers import ProfileSerializer
 from rest_framework import permissions
 
+class GoogleOAuth2Client(OAuth2Client):
+    def __init__(self, *args, **kwargs):
+        if 'scope_delimiter' in kwargs:
+            del kwargs['scope_delimiter']
+        super().__init__(*args, **kwargs)
+
 class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
-    callback_url = settings.GOOGLE_OAUTH_CALLBACK_URL
-    client_class = OAuth2Client
-
+    client_class = GoogleOAuth2Client 
+    callback_url = settings.GOOGLE_OAUTH_CALLBACK_URL 
 
 class CustomSignUpView(SignupView):
     def get_success_url(self):
@@ -122,17 +129,46 @@ class ScholarshipViewset(viewsets.ModelViewSet):
         application.delete()
         return Response({'message':'Scholarship saved'})
 
+    # @action(detail=True, methods=['get'])
+    # def details(self, request, pk=None):
+    #     scholarship = self.get_object()
+    #     data = self.get_serializer(scholarship).data
+
+    #     similar = Scholarship.objects.filter(Q(tags__in=scholarship.tags.all()) | Q(level__in=scholarship.level.all())).exclude(id=scholarship.id)\
+    #                             .annotate(match_count = Count('tags', filter=Q(tags__in=scholarship.tags.all()))).order_by('-match_count', 'end_date').distinct()[:10]
+    #     recommended = get_cached_recommendations(request.user)[:5]
+    #     similar_data = self.get_serializer(similar, many=True).data
+    #     recommended_data = self.get_serializer(recommended, many=True).data
+    #     return Response({'data':data, 'similar_scholarships':similar_data, 'recommended_scholarships':recommended_data})
+    
     @action(detail=True, methods=['get'])
     def details(self, request, pk=None):
         scholarship = self.get_object()
         data = self.get_serializer(scholarship).data
 
-        similar = Scholarship.objects.filter(Q(tags__in=scholarship.tags.all()) | Q(level__in=scholarship.level.all())).exclude(id=scholarship.id)\
-                                .annotate(match_count = Count('tags', filter=Q(tags__in=scholarship.tags.all()))).order_by('-match_count', 'end_date').distinct()[:10]
-        recommended = get_cached_recommendations(request.user)[:5]
+        similar = Scholarship.objects.filter(
+            Q(tags__in=scholarship.tags.all()) | 
+            Q(level__in=scholarship.level.all())
+        ).exclude(id=scholarship.id).annotate(
+            match_count=Count('tags', filter=Q(tags__in=scholarship.tags.all()))
+        ).order_by('-match_count', 'end_date').distinct()[:10]
+        
         similar_data = self.get_serializer(similar, many=True).data
-        recommended_data = self.get_serializer(recommended, many=True).data
-        return Response({'data':data, 'similar_scholarships':similar_data, 'recommended_scholarships':recommended_data})
+
+        recommended_data = []
+        if request.user.is_authenticated:
+            try:
+                recommended = get_cached_recommendations(request.user)[:5]
+                recommended_data = self.get_serializer(recommended, many=True).data
+            except Exception as e:
+                print(f"Recommendation error: {e}")
+                recommended_data = []
+
+        return Response({
+            'data': data, 
+            'similar_scholarships': similar_data, 
+            'recommended_scholarships': recommended_data
+        })
     
     @action(detail=True, methods=['post'])
     def apply(self, request, pk=None):
@@ -162,54 +198,6 @@ class ScholarshipViewset(viewsets.ModelViewSet):
             "message": "You will be notified when this scholarship reopens next year."
         })
     
-    # def normalize_url(self, url):
-    #     """Removes query params like ?utm_source=... to catch duplicates"""
-    #     if not url: return ""
-    #     parsed = urlparse(url)
-    #     return urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
-
-    # def create(self, request, *args, **kwargs):
-    #     raw_url = request.data.get('link') or request.data.get('url')
-    #     clean_url = self.normalize_url(raw_url)
-        
-    #     # 1. Try to find existing record
-    #     scholarship = Scholarship.objects.filter(url=clean_url).first()
-        
-    #     if scholarship:
-    #         # === MERGE STRATEGY ===
-    #         # If the DB has empty fields but the User provided data, fill them in.
-    #         has_changes = False
-            
-    #         fields_to_check = ['eligibility', 'requirements', 'reward', 'description']
-    #         for field in fields_to_check:
-    #             new_val = request.data.get(field)
-    #             current_val = getattr(scholarship, field)
-                
-    #             # If DB is empty/short AND User provided longer text, update it
-    #             if new_val and (not current_val or len(new_val) > len(current_val)):
-    #                 setattr(scholarship, field, new_val)
-    #                 has_changes = True
-            
-    #         if has_changes:
-    #             scholarship.status = 'PENDING' # Re-flag for AI review since data changed
-    #             scholarship.save()
-    #             process_scholarship_with_ai.delay(scholarship.id) # Trigger Celery Task
-    #             return Response({"message": "Scholarship updated with new details!"}, status=status.HTTP_200_OK)
-    #         else:
-    #             return Response({"message": "Scholarship already exists and is up to date."}, status=status.HTTP_200_OK)
-
-    #     else:
-    #         # === CREATE STRATEGY ===
-    #         # Standard creation, but set status to PENDING
-    #         serializer = self.get_serializer(data=request.data)
-    #         serializer.is_valid(raise_exception=True)
-    #         instance = serializer.save(status='PENDING', url=clean_url)
-            
-    #         # Trigger AI to clean this new raw entry
-    #         process_scholarship_with_ai.delay(instance.id)
-            
-    #         return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 def recommend_scholarships(request):
     profile = request.user.profile
     bookmarked_ids = Bookmark.objects.filter(user=request.user).values_list('scholarship_id', flat=True)
@@ -256,11 +244,43 @@ class UserViewset(viewsets.ViewSet):
         applied_scholarships = user.applied_scholarships.all()
         bookmarked_scholarships = user.bookmarked_scholarships.all()
 
-        recent_applications = Application.objects.filter(user=user).select_related('scholarship').order_by('-submitted_at')[:5]
+        recent_applications = Application.objects.filter(user=user).select_related('scholarship').order_by('-submitted_at')
+        recent_apps = list(ApplicationSerializer(recent_applications, many=True, context={'request': request}).data)
         recent_bookmarks = Bookmark.objects.filter(
             user=user
-        ).select_related('scholarship').order_by('-bookmarked_at')[:10]
+        ).select_related('scholarship').order_by('-bookmarked_at')
+        personal_scrapes = ScrapeSubmission.objects.filter(user=user).order_by('-created_at')
 
+        normalized_scrapes = []
+        for item in personal_scrapes:
+            scholarship_details = item.scholarship
+            normalized_scrapes.append({
+                'id': item['id'],               
+                'status': item['application_status'], 
+                'submitted_at': item['created_at'],
+                'scholarship': {
+                   
+                    'id': item['scholarship_details']['id'] if item['scholarship_details'] else None,
+                    'title': item['title'],
+                    'link': item['link'],
+                    'reward': item['reward'],
+                    'end_date': item['deadline'],
+                    'is_official': False 
+                },
+                'is_scrape': True 
+            })
+
+        # 5. Merge and Sort
+        # Add a flag to official apps too
+        for item in recent_apps:
+            item['is_scrape'] = False
+            item['scholarship']['is_official'] = True
+
+        all_tracked_items = sorted(
+            recent_apps + normalized_scrapes, 
+            key=lambda x: x['submitted_at'], 
+            reverse=True
+        )
         recommended_scholarships = get_cached_recommendations(user)[:5]
 
         upcoming_deadlines = Scholarship.objects.filter(
@@ -282,7 +302,7 @@ class UserViewset(viewsets.ViewSet):
         }
 
         data = {
-            'recent_applications': ApplicationSerializer(recent_applications, many=True, context={'request': request}).data,
+            # 'recent_applications': ApplicationSerializer(recent_applications, many=True, context={'request': request}).data,
             'recent_bookmarks': BookmarkSerializer(recent_bookmarks,many=True, context={'request': request}).data,
             'recommended_scholarships': ScholarshipSerializer(recommended_scholarships, many=True, context={'request': request}).data,
             'upcoming_deadlines': ScholarshipSerializer(upcoming_deadlines, many=True, context={'request': request}).data,
@@ -290,7 +310,9 @@ class UserViewset(viewsets.ViewSet):
             'recent_scholarships': ScholarshipSerializer(recent_scholarships, many=True, context={'request': request}).data,
             'stats': stats,
             'applied_scholarships': ScholarshipSerializer(applied_scholarships, many=True, context={'request': request}).data,
-            'bookmarked_scholarships': ScholarshipSerializer(bookmarked_scholarships, many=True, context={'request': request}).data
+            'bookmarked_scholarships': ScholarshipSerializer(bookmarked_scholarships, many=True, context={'request': request}).data,
+            # 'personal_scrapes': ScrapeSubmissionSerializer(personal_scrapes, many=True).data,
+            'recent_applications': all_tracked_items,
         }
 
         serializer = UserDashBoardSerializer(instance=data)
@@ -309,24 +331,46 @@ class SiteConfigViewset(viewsets.ModelViewSet):
             return [IsAdminUser()]
 
 
+class ScrapeSubmissionViewset(viewsets.ModelViewSet):
+    queryset = ScrapeSubmission.objects.all()
+    serializer_class = ScrapeSubmissionSerializer
+    
+    def get_queryset(self):
+        return ScrapeSubmission.objects.filter(user=self.request.user)
 
+    def partial_update(self, request, *args, **kwargs):
+        submission = self.get_object()
+        
+        new_status = request.data.get('application_status')
+        if new_status:
+            submission.application_status = new_status
+            submission.save()
+            return Response({'status': 'updated', 'application_status': new_status})
+        return Response({'error': 'No status provided'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def create(self, request, *args, **kwargs):
+        data = request.data
+        link = data.get('link')
 
+        submission = ScrapeSubmission.objects.create(
+            user=request.user,
+            link=link,
+            title=data.get('title'),
+            raw_data=data,
+            application_status='pending'
+        )
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        existing_scholarship = Scholarship.objects.filter(link=link).first()
+        
+        if existing_scholarship:
+            submission.scholarship = existing_scholarship
+            submission.status = 'APPROVED'
+            submission.save()
+            Application.objects.get_or_create(user=request.user, scholarship=existing_scholarship)
+            return Response({"message": "Scholarship found! Added to your applications."}, status=status.HTTP_200_OK)        
+        else:
+            process_new_submission.delay(submission.id)
+            return Response({"message": "Saved! Processing for public verification..."}, status=status.HTTP_201_CREATED)
 
 
 

@@ -5,6 +5,7 @@ import SignUp from "./pages/Signup";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";  
+import GoogleCallback from "./pages/GoogleCallback";
 
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/google/callback" element={<GoogleCallback />} />
       </Routes>
     </Router>
   );

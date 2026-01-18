@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Scholarship, Application, Bookmark, User, Profile, SiteConfig
+from .models import Scholarship, Application, Bookmark, User, Profile, SiteConfig, ScrapeSubmission
 from .models import Profile, Level, Tag
 
 class SiteConfigSerializer(serializers.ModelSerializer):
@@ -47,19 +47,37 @@ class BookmarkSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         validated_data['user'] = user
         return super().create(validated_data)
+    
+class ScrapeSubmissionSerializer(serializers.ModelSerializer):
+    scholarship_details = ScholarshipSerializer(source='scholarship', read_only=True)
+    
+    reward = serializers.SerializerMethodField()
+    deadline = serializers.SerializerMethodField()
 
+    class Meta:
+        model = ScrapeSubmission
+        fields = ['id', 'title', 'link', 'verification_status', 'created_at', 'scholarship_details', 'reward', 'deadline', "application_status"]
+
+    def get_reward(self, obj):
+        return obj.raw_data.get('reward', 'N/A')
+
+    def get_deadline(self, obj):
+        return obj.raw_data.get('end_date') or obj.raw_data.get('deadline')
+    
 class UserSerializer(serializers.ModelSerializer):
     applied_scholarships = ScholarshipSerializer(many=True, read_only=True)
     bookmarked_scholarships = ScholarshipSerializer(many=True, read_only=True)
+    recent_submissions = ScrapeSubmissionSerializer(many=True)
     class Meta:
         model = User
         fields = ['is_admin', 'applied_scholarships', 'bookmarked_scholarships']
 
 class UserDashBoardSerializer(serializers.Serializer):
-    recent_applications = ApplicationSerializer(many=True)
+    recent_applications = serializers.ListField()
     recent_bookmarks = BookmarkSerializer(many=True)
     applied_scholarships = ScholarshipSerializer(many=True)
     bookmarked_scholarships = ScholarshipSerializer(many=True)
+    # personal_scrapes = ScrapeSubmissionSerializer(many=True)
     stats = serializers.DictField()
 
 class ApplicationStatusSerializer(serializers.ModelSerializer):
@@ -159,3 +177,5 @@ class ProfileSerializer(serializers.ModelSerializer):
             instance.tags.set(tag_ids)
 
         return instance
+    
+

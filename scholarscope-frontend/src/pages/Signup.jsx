@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { GoogleLogin } from "@react-oauth/google";
 import { Eye, EyeOff, Loader2, School } from "lucide-react"; 
 import api from "../api";
 
@@ -19,6 +18,23 @@ export default function SignUp() {
     const handleChange = (event) => {
         setFormData({ ...formData, [event.target.name]: event.target.value });
     };
+
+    function handleGoogleLogin() {
+        const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+        const REDIRECT_URI = "http://localhost:5173/google/callback"; 
+        
+        const params = {
+            response_type: 'code',
+            client_id: import.meta.env.VITE_CLIENT_ID, // Ensure this matches .env
+            redirect_uri: REDIRECT_URI,
+            scope: 'openid profile email',
+            prompt: 'select_account',
+            access_type: 'offline'
+        };
+
+        const urlParams = new URLSearchParams(params).toString();
+        window.location.href = `${GOOGLE_AUTH_URL}?${urlParams}`;
+    }
 
     const handleSubmit = async (event) => {
         event.preventDefault();
@@ -197,13 +213,13 @@ export default function SignUp() {
                 </div>
 
                 <div className="flex justify-center">
-                    <GoogleLogin
-                        onSuccess={handleGoogleSuccess}
-                        onError={() => setError("Google Signup Failed")}
-                        theme="filled_blue"
-                        shape="circle"
-                        width="100%"
-                    />
+                    <button 
+                        onClick={handleGoogleLogin}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                        <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="h-5 w-5" alt="Google" />
+                        Sign in with Google
+                    </button>
                 </div>
 
                 <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">

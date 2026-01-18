@@ -1,6 +1,5 @@
 import sys
 import os
-import django
 import logging
 import multiprocessing 
 from celery import shared_task
@@ -280,8 +279,8 @@ def send_weekly_renewal_notifications():
                 f"Hello {user.first_name},\n\n"
                 f"The scholarship you are tracking, '{scholarship.title}', "
                 f"has reopened for the new cycle.\n\n"
-                f"📅 Deadline: {scholarship.latest_deadline}\n"
-                f"🔗 Apply: {scholarship.link}\n\n"
+                f"Deadline: {scholarship.latest_deadline}\n"
+                f"Apply: {scholarship.link}\n\n"
                 f"Good luck!"
             )
             
@@ -296,76 +295,101 @@ def send_weekly_renewal_notifications():
 
     return f"Sent {emails_sent} renewal notifications."
 
+# tasks.py
+@shared_task
+def process_new_submission(submission_id):
+    from scholarships.models import ScrapeSubmission, Scholarship, Application, Tag, Level
+    from scholar_scope.scholarscope_scrapers.scholarscope_scrapers.utils.quality import QualityCheck
+    from scholar_scope.scholarscope_scrapers.scholarscope_scrapers.utils.llm_engine import LLMEngine
+    
+    try:
+        sub = ScrapeSubmission.objects.get(id=submission_id)
+        if sub.status != 'PENDING': return
 
-
-# from celery import shared_task
-# from django.conf import settings
-# from .models import Scholarship
-# import openai 
-# import json
-
-# @shared_task
-# def process_scholarship_with_ai(scholarship_id):
-#     try:
-#         scholarship = Scholarship.objects.get(id=scholarship_id)
+        quality_report = QualityCheck.get_quality_score(
+            sub.raw_data, 
+            critical_fields=['title', 'link', 'description', 'reward', 'eligibility', 'requirements', 'end_date', 'start_date']
+        )
         
-#         # Combine all text for the AI to read
-#         full_text = f"""
-#         Title: {scholarship.title}
-#         Desc: {scholarship.description}
-#         Elig: {scholarship.eligibility}
-#         Reqs: {scholarship.requirements}
-#         """
+        if quality_report.get('is_garbage_content'):
+            sub.status = 'REJECTED'
+            sub.raw_data['rejection_reason'] = quality_report['critical_failures']
+            sub.save()
+            return
 
-#         # 1. The Prompt
-#         prompt = f"""
-#         You are a data cleaner for a scholarship database.
-#         Analyze the text below. 
-        
-#         Task 1: Extract 'deadline' (YYYY-MM-DD), 'country' (ISO code), and 'education_level'.
-#         Task 2: Summarize 'eligibility' and 'requirements' into clean bullet points.
-#         Task 3: Verify if this is a legitimate scholarship. If yes, set 'is_valid' to true.
+        llm_engine = LLMEngine()
+        ai_data = {}
+        is_valid_scholarship = False
 
-#         Input Text: {full_text[:3000]} 
-
-#         Return ONLY raw JSON:
-#         {{
-#             "is_valid": true/false,
-#             "deadline": "YYYY-MM-DD" or null,
-#             "country": "String" or null,
-#             "education_level": "Undergraduate" or "Postgraduate" or "PhD" or "Any",
-#             "clean_eligibility": "String...",
-#             "clean_requirements": "String..."
-#         }}
-#         """
-
-#         # 2. Call AI API
-#         response = openai.ChatCompletion.create(
-#             model="gpt-3.5-turbo", # or generic equivalent
-#             messages=[{"role": "user", "content": prompt}],
-#             temperature=0
-#         )
-        
-#         # 3. Parse JSON
-#         data = json.loads(response.choices[0].message.content)
-
-#         # 4. Update Database
-#         if data.get('is_valid'):
-#             if data.get('deadline'): scholarship.deadline = data['deadline']
-#             if data.get('country'): scholarship.country = data['country']
-#             if data.get('education_level'): scholarship.education_level = data['education_level']
+        if QualityCheck.should_full_regenerate(quality_report):
+            print(f"Submission {sub.id}: Poor parsing detected. Attempting Full AI Regeneration.")
+            ai_result = llm_engine.extract_all(sub.raw_data)
             
-#             # Replace messy user text with AI cleaned text (Optional, based on preference)
-#             if data.get('clean_eligibility'): scholarship.eligibility = data['clean_eligibility']
-#             if data.get('clean_requirements'): scholarship.requirements = data['clean_requirements']
+            if ai_result.get('is_valid'):
+                ai_data = ai_result
+                is_valid_scholarship = True
+            else:
+                sub.status = 'REJECTED'
+                sub.raw_data['rejection_reason'] = "AI confirmed invalid content"
+                sub.save()
+                return
+
+        elif len(quality_report['failed_fields']) > 0:
+            print(f"Submission {sub.id}: Mostly good, recovering fields: {quality_report['failed_fields']}")
+            recovered_data = llm_engine.recover_specific_fields(
+                sub.raw_data, 
+                fields_to_fix=quality_report['failed_fields']
+            )
+            ai_data = {**sub.raw_data, **recovered_data}
+            is_valid_scholarship = True
             
-#             scholarship.status = 'VERIFIED' # <--- Auto-Verification!
-#         else:
-#             scholarship.status = 'REJECTED' # AI thinks it's spam/junk
+        else:
+            print(f"Submission {sub.id}: High quality, auto-approving.")
+            ai_data = sub.raw_data
+            is_valid_scholarship = True
 
-#         scholarship.save()
+        if is_valid_scholarship:
+            tags_list = ai_data.get('tags', [])
+            levels_list = ai_data.get('level', [])
+            
+            scholarship, created = Scholarship.objects.update_or_create(
+                link=sub.link,
+                defaults={
+                    'title': ai_data.get('title'),
+                    'description': ai_data.get('description'),
+                    'eligibility': ai_data.get('eligibility'), 
+                    'requirements': ai_data.get('requirements'),
+                    'reward': ai_data.get('reward'),
+                    'start_date': ai_data.get('start_date'),
+                    'end_date': ai_data.get('end_date'),
+                    'active': True 
+                }
+            )
+            
+            scholarship.level.clear() 
+            for lvl_name in levels_list:
+                if lvl_name:
+                    clean_name = str(lvl_name).strip().title()
+                    level_obj, _ = Level.objects.get_or_create(name=clean_name)
+                    scholarship.level.add(level_obj)
 
-#     except Scholarship.DoesNotExist:
-#         pass
-#     except Exception as e:
-#         print(f"AI Processing Failed: {e}")
+            scholarship.tags.clear() 
+            for tag_name in tags_list:
+                if tag_name:
+                    clean_tag = str(tag_name).strip().title()
+                    tag_obj, _ = Tag.objects.get_or_create(name=clean_tag)
+                    scholarship.tags.add(tag_obj)
+
+            sub.scholarship = scholarship
+            sub.status = 'APPROVED'
+            sub.raw_data.update(ai_data) 
+            sub.save()
+            
+            Application.objects.get_or_create(
+                user=sub.user, 
+                scholarship=scholarship,
+                defaults={'status': 'pending'}
+            )
+
+    except ScrapeSubmission.DoesNotExist:
+        pass

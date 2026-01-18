@@ -27,8 +27,6 @@ sys.path.append(SCRAPERS_DIR)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY')
-# SECRET_KEY = '6dik9^mld%u(9jwj-t@o758h$(^7d@#d*&he&j-2ovo=v6slh@'
-# 6dik9^mld%u(9jwj-t@o758h$(^7d@#d*&he&j-2ovo=v6slh@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=False, cast=bool)
 
@@ -110,6 +108,7 @@ REST_AUTH = {
     "JWT_AUTH_COOKIE": "_auth",  # Name of access token cookie
     "JWT_AUTH_REFRESH_COOKIE": "_refresh", # Name of refresh token cookie
     "JWT_AUTH_HTTPONLY": False,  # Makes sure refresh token is sent
+    "LOGIN_ON_REGISTER": True,
 }
 
 MIDDLEWARE = [
@@ -235,7 +234,6 @@ MEDIA_ROOT= BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-AUTH_USER_MODEL = 'scholarships.User'
 
 # SOCIALACCOUNT_PROVIDERS = {
 #     'google': {
@@ -253,23 +251,52 @@ AUTH_USER_MODEL = 'scholarships.User'
 
 
 REDIS_URL = config("REDIS_URL")
-SOCIALACCOUNT_LOGIN_ON_GET = True
 
+# SOCIALACCOUNT_LOGIN_ON_GET = True
 # SOCIALACCOUNT_AUTO_SIGNUP = True
-SOCIALACCOUNT_AUTO_SIGNUP = True
+# SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+# ACCOUNT_SIGNUP_REDIRECT_URL = '/' 
+# ACCOUNT_EMAIL_VERIFICATION = "none"
+# SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+# SOCIALACCOUNT_QUERY_EMAIL = True
+# ACCOUNT_UNIQUE_EMAIL = True
+# SOCIALACCOUNT_AUTO_SIGNUP = True
+# ACCOUNT_EMAIL_REQUIRED = True
+# ACCOUNT_AUTHENTICATION_METHOD = "email"
+# ACCOUNT_USERNAME_REQUIRED = False
+# # ACCOUNT_EMAIL_REQUIRED = True
+# ACCOUNT_EMAIL_VERIFICATION = "optional"
+# ACCOUNT_CONFIRM_EMAIL_ON_GET = True
+# SOCIALACCOUNT_ADAPTER="scholarscope.adapters.MySocialAccountAdapter"
+
+# --- Authentication Settings ---
+AUTH_USER_MODEL = 'scholarships.User'
+
+# 1. Login with Email (No Username)
+ACCOUNT_AUTHENTICATION_METHOD = 'email' 
+ACCOUNT_EMAIL_REQUIRED = True           
+ACCOUNT_UNIQUE_EMAIL = True             
+ACCOUNT_USERNAME_REQUIRED = False       
+
+# 2. Email Verification & Auto-Login
+# 'optional' is perfect: It creates the user immediately (allowing auto-login)
+# but still allows you to send a verification email in the background if you want.
+ACCOUNT_EMAIL_VERIFICATION = 'optional' 
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True
+
+# 3. Redirects
+LOGIN_REDIRECT_URL = 'scholarship_list'
+LOGOUT_REDIRECT_URL = 'account_login'
 ACCOUNT_SIGNUP_REDIRECT_URL = '/' 
-ACCOUNT_EMAIL_VERIFICATION = "none"
+
+# --- Social Account Settings ---
+SOCIALACCOUNT_ADAPTER = "scholarscope.adapters.MySocialAccountAdapter"
+SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_QUERY_EMAIL = True
-ACCOUNT_UNIQUE_EMAIL = True
-SOCIALACCOUNT_AUTO_SIGNUP = True
-# ACCOUNT_EMAIL_REQUIRED = True
-# ACCOUNT_AUTHENTICATION_METHOD = "username_email"
-ACCOUNT_LOGIN_METHODS = {'username', 'email'}
-# ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
-# ACCOUNT_EMAIL_VERIFICATION = "mandatory"
-SOCIALACCOUNT_ADAPTER="scholarscope.adapters.MySocialAccountAdapter"
+SOCIALACCOUNT_LOGIN_ON_GET = True
+
+
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True

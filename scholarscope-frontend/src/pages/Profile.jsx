@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
-import Navbar from './Navbar';
+import Navbar from '../components/Navbar';
 import { 
   Camera, X, Plus, Check, Loader2, Save, LogOut 
 } from 'lucide-react';

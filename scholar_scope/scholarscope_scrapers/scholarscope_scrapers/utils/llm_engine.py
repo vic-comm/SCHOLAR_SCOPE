@@ -48,12 +48,25 @@ class LLMEngine:
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
         }
-    def _clean_html(self, html_content):
-        return trafilatura.extract(html_content) or ""
+
+    def _prepare_content(self, input_data):
+        if not input_data:
+            return ""
+
+        if isinstance(input_data, dict):
+            return json.dumps(input_data, indent=2)
+
+        if isinstance(input_data, str):
+            if "<html" in input_data.lower() or "<body" in input_data.lower() or "<div" in input_data.lower():
+                extracted = trafilatura.extract(input_data)
+                return extracted if extracted else ""
+            else:
+                return input_data
+
+        return str(input_data)
 
     async def extract_data(self, html_content, url):
-        clean_text = self._clean_html(html_content)
-        
+        clean_text = self._prepare_content(html_content)
         if not clean_text or len(clean_text) < 100:
             return None
 
@@ -74,6 +87,7 @@ class LLMEngine:
 
         REQUIRED JSON STRUCTURE:
         {{
+            "is_valid": boolean (True if this describes a scholarship/grant, False if login page/blog/404),
             "title": "string (Exact official name)",
             "description": "string (2-3 sentence summary)",
             "reward": "string (e.g., '$5,000', 'Full Tuition', 'Varies')",
@@ -138,7 +152,6 @@ class LLMEngine:
 
         for attempt in range(max_retries + 1):
             try:
-                # Run sync Gemini call in a thread
                 response = await asyncio.to_thread(
                     self.model.generate_content,
                     prompt,
@@ -149,7 +162,6 @@ class LLMEngine:
             except Exception as e:
                 error_msg = str(e)
                 
-                # Check for Rate Limit (429) or Overloaded (503)
                 if "429" in error_msg or "ResourceExhausted" in error_msg:
                     if attempt < max_retries:
                         print(f"Gemini Rate Limit (Attempt {attempt+1}/{max_retries}). Sleeping {delay}s...")

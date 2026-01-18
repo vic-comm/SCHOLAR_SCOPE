@@ -28,6 +28,7 @@ urlpatterns = [
     path('api/v1/auth/registration/', include('dj_rest_auth.registration.urls')),
     path('api/', include('scholarships.urls')),
     path('accounts/signup/', views.CustomSignUpView.as_view(), name='account_signup'),
+    path('api/v1/auth/google/', views.GoogleLogin.as_view(), name='google_login'),
     path('accounts/', include('allauth.urls')),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
