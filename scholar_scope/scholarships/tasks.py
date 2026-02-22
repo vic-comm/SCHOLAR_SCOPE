@@ -120,7 +120,6 @@ def scrape_site(self, site_config_id, scrape_event_id=None):
 
 @shared_task
 def scrape_all_sources():
-    # 👇 Local import
     from scholarships.models import SiteConfig
     sources = SiteConfig.objects.filter(active=True)
     for site in sources:
@@ -254,6 +253,7 @@ def send_weekly_renewal_notifications():
     
     renewed_scholarships = Scholarship.objects.filter(
         status='active',
+        is_recurring=True,
         last_renewed_at__gte=seven_days_ago
     )
     
@@ -268,7 +268,7 @@ def send_weekly_renewal_notifications():
         current_year = timezone.now().year
         watchers = WatchedScholarship.objects.filter(
             scholarship=scholarship
-        ).exclude(notified_for_year=current_year).select_related('user')
+        ).exclude(notified_for_year__year=current_year).select_related('user')
         
         for watch in watchers:
             user = watch.user
@@ -287,6 +287,7 @@ def send_weekly_renewal_notifications():
             try:
                 send_mail(subject, message, 'noreply@scholarscope.com', [user.email])
                 
+                watch.notified_for_year = timezone.now()
                 watch.notified_for_year = current_year
                 watch.save()
                 emails_sent += 1

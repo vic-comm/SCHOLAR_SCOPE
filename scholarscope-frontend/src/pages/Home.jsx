@@ -63,6 +63,35 @@ export default function Home(){
     }
   }
 
+  const handleToggleWatch = async (id) => {
+  // 1. Find the current scholarship to know its state
+  const targetScholarship = scholarships.find((s) => s.id === id);
+  if (!targetScholarship) return;
+
+  const wasWatched = targetScholarship.is_watched;
+
+  // 2. Optimistic UI Update: Instantly toggle it in the local state
+  setScholarships((prevScholarships) =>
+    prevScholarships.map((s) =>
+      s.id === id ? { ...s, is_watched: !wasWatched } : s
+    )
+  );
+
+  // 3. Make the API call
+  try {
+    await api.post(`scholarships/${id}/toggle_watch_scholarship/`);
+    // Optional: show a small toast notification here
+  } catch (err) {
+    console.error("Watch toggle failed:", err);
+    // 4. Revert the UI if the API call fails
+    setScholarships((prevScholarships) =>
+      prevScholarships.map((s) =>
+        s.id === id ? { ...s, is_watched: wasWatched } : s
+      )
+    );
+  }
+};
+
   return (
     <div className="font-display bg-background-light dark:bg-background-dark min-h-screen">
       <Navbar onFilter={handleFilter} />
@@ -87,6 +116,7 @@ export default function Home(){
                 <ScholarshipCard
                   scholarship={scholarship}
                   onToggleBookmark={handleBookmarkToggle}
+                  onToggleWatch={handleToggleWatch}
                 />
               </Link>
             ))}

@@ -177,3 +177,104 @@ class LLMEngine:
                 return {}
         
         return {}
+    
+    async def draft_essays(self, user_profile: dict, prompts_list: list[dict]) -> list[dict]:
+        """
+        Draft scholarship essay responses for a list of prompts using the user's profile.
+
+        Args:
+            user_profile: Rich dict of user data (name, bio, major, achievements, etc.)
+            prompts_list: [{'id': 'scholarscope-ta-0', 'prompt': '...', 'max_words': 200}]
+
+        Returns:
+            [{'id': '...', 'draft': '...', 'word_count': int, 'confidence': str}]
+        """
+        if not prompts_list:
+            return []
+
+        # ── Build a rich profile context ──────────────────────────────────────
+        profile_lines = [
+            f"Name: {user_profile.get('first_name', '')} {user_profile.get('last_name', '')}".strip(),
+            f"Major / Field of Study: {user_profile.get('field_of_study', 'Not specified')}",
+            f"University / Institution: {user_profile.get('institution', 'Not specified')}",
+            f"Year of Study: {user_profile.get('year_of_study', 'Not specified')}",
+            f"GPA: {user_profile.get('gpa', 'Not specified')}",
+            f"Country / Nationality: {user_profile.get('country', 'Not specified')}",
+            f"Bio & Background: {user_profile.get('bio') or 'Passionate student committed to academic excellence.'}",
+            f"Key Achievements: {user_profile.get('achievements') or 'Not provided.'}",
+            f"Career Goals: {user_profile.get('career_goals') or 'Not provided.'}",
+            f"Extracurriculars / Volunteering: {user_profile.get('extracurriculars') or 'Not provided.'}",
+            f"Financial Need Context: {user_profile.get('financial_need') or 'Not provided.'}",
+        ]
+        # Strip empty lines to avoid wasting tokens
+        profile_context = "\n".join(line for line in profile_lines if not line.endswith("Not specified") or True)
+
+        SYSTEM_PROMPT = (
+            "You are an expert scholarship application coach who writes in the applicant's "
+            "authentic voice — never generic, never fabricated. "
+            "Rules you must follow:\n"
+            "1. Use ONLY the information in the Student Profile; never invent facts, metrics, or jobs.\n"
+            "2. Write in first person, as the student.\n"
+            "3. Be specific and concrete — vague answers are automatically rejected.\n"
+            "4. Respect the requested word limit exactly.\n"
+            "5. End with a forward-looking sentence that ties back to the scholarship's purpose.\n"
+            "6. Return ONLY the essay text — no preamble, no labels, no markdown."
+        )
+
+        # ── Run all drafts concurrently ───────────────────────────────────────
+        import asyncio
+
+        async def _draft_single(item: dict) -> dict:
+            question   = item.get("prompt", "").strip()
+            item_id    = item.get("id", "")
+            max_words  = int(item.get("max_words") or 200)
+
+            if not question:
+                return {"id": item_id, "draft": "", "word_count": 0, "confidence": "low"}
+
+            user_prompt = (
+                f"Student Profile:\n{profile_context}\n\n"
+                f"Scholarship Question:\n{question}\n\n"
+                f"Write a response of NO MORE THAN {max_words} words."
+            )
+
+            try:
+                response = await self.client.generate_content_async(
+                    contents=user_prompt,
+                    generation_config={
+                        "temperature": 0.75,       # slight creativity, stays grounded
+                        "max_output_tokens": max_words * 6,  # ~6 tokens/word buffer
+                        "top_p": 0.9,
+                    },
+                    system_instruction=SYSTEM_PROMPT,
+                )
+
+                draft_text = response.text.strip()
+                word_count = len(draft_text.split())
+
+                # Confidence heuristic: penalise if profile was thin
+                profile_filled = sum(
+                    1 for k in ("bio", "achievements", "career_goals", "extracurriculars")
+                    if user_profile.get(k)
+                )
+                confidence = "high" if profile_filled >= 3 else ("medium" if profile_filled >= 1 else "low")
+
+                return {
+                    "id":         item_id,
+                    "draft":      draft_text,
+                    "word_count": word_count,
+                    "confidence": confidence,
+                }
+
+            except Exception as exc:
+                self.logger.error(f"draft_essays: failed for prompt id={item_id}: {exc}")
+                return {
+                    "id":         item_id,
+                    "draft":      "",
+                    "word_count": 0,
+                    "confidence": "failed",
+                    "error":      str(exc),
+                }
+
+        results = await asyncio.gather(*[_draft_single(item) for item in prompts_list])
+        return list(results)

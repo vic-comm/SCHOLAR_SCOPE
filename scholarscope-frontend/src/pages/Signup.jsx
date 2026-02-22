@@ -64,7 +64,7 @@ export default function SignUp() {
             if (response.data.access) {
                 localStorage.setItem("access_token", response.data.access);
                 localStorage.setItem("refresh_token", response.data.refresh);
-                navigate("/dashboard");
+                navigate("/profile");
             } else {
                 // If email verification is mandatory, backend might not return tokens yet
                 navigate("/login"); 
@@ -104,7 +104,7 @@ export default function SignUp() {
             if (response.data.access) {
                 localStorage.setItem("access_token", response.data.access);
                 localStorage.setItem("refresh_token", response.data.refresh);
-                navigate("/dashboard");
+                navigate("/profile");
             }
         } catch (err) {
             console.error("Google Login Error:", err);

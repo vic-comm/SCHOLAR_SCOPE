@@ -12,16 +12,30 @@ from django.core.cache import cache
 def create_profile(sender, instance, created, **kwargs):
     if created:
         profile = Profile.objects.create(user=instance)
-        generate_profile_embedding.delay(profile_id=profile.id)
+        if _profile_has_embeddable_text(profile):
+            generate_profile_embedding.delay(profile_id=profile.id)
 
+
+def _profile_has_embeddable_text(profile) -> bool:
+    return bool(
+        (profile.field_of_study or "").strip()
+        or (profile.bio or "").strip()
+        or (profile.preferred_scholarship_types or "").strip()
+    )
+
+@receiver(post_save, sender=Profile)
+def reembed_profile_on_update(sender, instance, created, **kwargs):
+    if not _profile_has_embeddable_text(instance):
+        return
+    generate_profile_embedding.delay(profile_id=instance.id)
 
 @receiver(post_save, sender=Scholarship)
-def create_embeddings(sender, instance, created, **kwargs):
+def embed_scholarship_on_create(sender, instance, created, **kwargs):
     if created:
        generate_scholarship_embedding.delay(scholarship_id=instance.id)
 
 @receiver(post_save, sender=Scholarship)
-def scholarship_post_save_invalidate(sender, instance, created, **kwargs):
+def invalidate_caches_on_scholarship_save(sender, instance, created, **kwargs):
     """
     Strategy A + B combo:
     - A: selectively clear cache for users with overlapping tags/levels.
@@ -33,8 +47,8 @@ def scholarship_post_save_invalidate(sender, instance, created, **kwargs):
         cache.set("scholarships_updated_at", now().isoformat())
 
     # --- Strategy A: selective invalidation ---
-    tag_ids = list(instance.tags.values_list("id", flat=True)) if hasattr(instance, "tags") else []
-    level_ids = list(instance.level.values_list("id", flat=True)) if hasattr(instance, "level") else []
+    tag_ids   = _safe_m2m_ids(instance, "tags")
+    level_ids = _safe_m2m_ids(instance, "level")
 
     if not tag_ids and not level_ids:
         return  # nothing to match on
@@ -45,8 +59,25 @@ def scholarship_post_save_invalidate(sender, instance, created, **kwargs):
         ).distinct().values_list("user_id", flat=True)
     )
 
-    # optional: run in Celery batches for scale
+    if not user_ids:
+        return
+    
     BATCH_SIZE = 500
     for i in range(0, len(user_ids), BATCH_SIZE):
         batch = user_ids[i : i + BATCH_SIZE]
         batch_invalidate_user_recommendations.delay(batch)
+
+
+def _safe_m2m_ids(instance, field_name: str) -> list:
+    """
+    Safely read M2M IDs from a model instance.
+    Returns an empty list if the field doesn't exist or the relation
+    isn't yet set up (e.g. during migrations).
+    """
+    try:
+        manager = getattr(instance, field_name, None)
+        if manager is None:
+            return []
+        return list(manager.values_list("id", flat=True))
+    except Exception:
+        return []

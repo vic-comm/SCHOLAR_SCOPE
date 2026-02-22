@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'django_htmx',
     'scholarships.apps.ScholarshipsConfig',
+    'pgvector',
     'tailwind',
     'theme',
     'drf_spectacular',
@@ -78,7 +79,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',),
+        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',),
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
         
@@ -109,6 +111,11 @@ REST_AUTH = {
     "JWT_AUTH_REFRESH_COOKIE": "_refresh", # Name of refresh token cookie
     "JWT_AUTH_HTTPONLY": False,  # Makes sure refresh token is sent
     "LOGIN_ON_REGISTER": True,
+}
+
+# settings.py
+REST_AUTH_SERIALIZERS = {
+    'USER_DETAILS_SERIALIZER': 'users.serializers.UserSerializer',
 }
 
 MIDDLEWARE = [
@@ -285,9 +292,9 @@ ACCOUNT_EMAIL_VERIFICATION = 'optional'
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 
 # 3. Redirects
-LOGIN_REDIRECT_URL = 'scholarship_list'
-LOGOUT_REDIRECT_URL = 'account_login'
-ACCOUNT_SIGNUP_REDIRECT_URL = '/' 
+LOGIN_REDIRECT_URL = '/dashboard'
+LOGOUT_REDIRECT_URL = '/login'
+ACCOUNT_SIGNUP_REDIRECT_URL = '/profile' 
 
 # --- Social Account Settings ---
 SOCIALACCOUNT_ADAPTER = "scholarscope.adapters.MySocialAccountAdapter"
@@ -302,8 +309,6 @@ CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BEAT_SCHEDULER='django_celery_beat.schedulers.DatabaseScheduler'
 SOCIALACCOUNT_AUTO_SIGNUP = True
-LOGIN_REDIRECT_URL = 'scholarship_list'
-LOGOUT_REDIRECT_URL = 'account_login'
 # if DEBUG:
 #     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 #     EMAIL_HOST = 'smtp.gmail.com'

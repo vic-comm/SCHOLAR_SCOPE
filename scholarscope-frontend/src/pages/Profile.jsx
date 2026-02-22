@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Navbar from '../components/Navbar';
+import ProfileCompletion from '../components/ProfileCompletion';
+
 import { 
   Camera, X, Plus, Check, Loader2, Save, LogOut 
 } from 'lucide-react';
 
-// --- Constants ---
 const COUNTRIES = [
   'United States', 'Canada', 'United Kingdom', 'Australia', 'Germany', 'France',
   'Netherlands', 'Sweden', 'Norway', 'Denmark', 'Finland', 'Switzerland',
@@ -71,6 +72,7 @@ export default function Profile() {
   const [scholarshipTypes, setScholarshipTypes] = useState([]);
   const [selectedTags, setSelectedTags] = useState([]);
   const [selectedLevels, setSelectedLevels] = useState([]);
+  const [completionScore, setCompletionScore] = useState(0);
 
   // --- API Effects ---
   useEffect(() => {
@@ -79,7 +81,7 @@ export default function Profile() {
 
   const fetchProfile = async () => {
     try {
-      const res = await api.get('scholarships/update_profile/'); 
+      const res = await api.get('users/update_profile/'); 
       const data = res.data;
 
       setFormData({
@@ -93,7 +95,7 @@ export default function Profile() {
         graduation_year: data.graduation_year || '',
         profile_pic: data.profile_pic || null
       });
-
+      setCompletionScore(data.profile_completion || data.completion_percentage || 0);
       // Handle comma-separated strings if backend stores them that way
       if (data.preferred_countries) {
         setPreferredCountries(data.preferred_countries.split(',').map(c => c.trim()).filter(Boolean));
@@ -127,7 +129,7 @@ export default function Profile() {
       };
 
      
-    await api.post('scholarships/update_profile/', payload);
+    await api.post('users/update_profile/', payload);
       
       showToastMessage('Profile updated successfully!', 'success');
     } catch (error) {
@@ -203,6 +205,7 @@ export default function Profile() {
             </button>
           </div>
         </div>
+        <ProfileCompletion percentage={completionScore} />
 
         <div className="space-y-6">
           

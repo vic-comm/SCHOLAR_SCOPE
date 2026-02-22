@@ -8,6 +8,7 @@ from scholarships.utils import random_string_generator
 from django.utils.text import slugify
 import hashlib
 from django.contrib.postgres.fields import ArrayField
+from pgvector.django import VectorField
 # Create your models here.
 class User(AbstractUser):
     applied_scholarships = models.ManyToManyField(
@@ -63,7 +64,7 @@ class Scholarship(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     fingerprint = models.CharField(max_length=1000, null=True, blank=True)
     slug = models.SlugField(null=True, blank=True, max_length=1000)
-    embedding = ArrayField(models.FloatField(), null=True, blank=True)
+    embedding = VectorField(dimensions=384, null=True, blank=True)
     scraped_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
     is_recurring = models.BooleanField(default=False, help_text="True if this scholarship reopens annually.")
     last_renewed_at = models.DateTimeField(null=True, blank=True,help_text="The last time we detected a new cycle for this item.")
@@ -245,8 +246,25 @@ class Profile(models.Model):
     profile_picture = models.ImageField(upload_to="profiles/", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    embedding = ArrayField(models.FloatField(), null=True, blank=True)
-
+    embedding = VectorField(dimensions=384, null=True, blank=True)
+    
+    @property
+    def completion_percentage(self):
+        fields_to_check = [
+            'bio', 'field_of_study', 'country', 'city', 'full_name', 'tags',
+            'institution', 'level', 'graduation_year',
+            'preferred_scholarship_types', 'preferred_countries'
+        ]
+        
+        filled_count = 0
+        for field in fields_to_check:
+            value = getattr(self, field, None)
+            if value and str(value).strip(): 
+                filled_count += 1
+        
+        if not fields_to_check: return 0
+        return int((filled_count / len(fields_to_check)) * 100)
+    
     def __str__(self):
         return f"{self.user.username}'s Profile"
 

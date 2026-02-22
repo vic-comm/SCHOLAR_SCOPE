@@ -21,6 +21,17 @@ from django.conf import settings
 from .utils import get_cached_recommendations
 from .serializers import ProfileSerializer
 from rest_framework import permissions
+from rest_framework.decorators import api_view, permission_classes
+from asgiref.sync import async_to_sync
+import datetime
+import dateparser
+from .models import Scholarship
+from .utils import ScholarshipExtractor
+from ..scholarscope_scrapers.scholarscope_scrapers.utils.llm_engine import LLMEngine
+from ..scholarscope_scrapers.scholarscope_scrapers.utils.quality import QualityCheck
+import logging
+
+logger = logging.getLogger(__name__)
 
 class GoogleOAuth2Client(OAuth2Client):
     def __init__(self, *args, **kwargs):
@@ -32,6 +43,7 @@ class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
     client_class = GoogleOAuth2Client 
     callback_url = settings.GOOGLE_OAUTH_CALLBACK_URL 
+    permission_classes = [AllowAny]
 
 class CustomSignUpView(SignupView):
     def get_success_url(self):
@@ -209,18 +221,18 @@ def recommend_scholarships(request):
 
     return result
 
-class ProfileViewSet(viewsets.ModelViewSet):
-    serializer_class = ProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# class ProfileViewSet(viewsets.ModelViewSet):
+#     serializer_class = ProfileSerializer
+#     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        return Profile.objects.filter(user=self.request.user)
+#     def get_queryset(self):
+#         return Profile.objects.filter(user=self.request.user)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+#     def perform_create(self, serializer):
+#         serializer.save(user=self.request.user)
 
-    def perform_update(self, serializer):
-        serializer.save(user=self.request.user)
+#     def perform_update(self, serializer):
+#         serializer.save(user=self.request.user)
 
 class UserViewset(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
@@ -243,7 +255,8 @@ class UserViewset(viewsets.ViewSet):
         user = request.user
         applied_scholarships = user.applied_scholarships.all()
         bookmarked_scholarships = user.bookmarked_scholarships.all()
-
+        watched_records = WatchedScholarship.objects.filter(user=user).select_related('scholarship')
+        watched_scholarships = [record.scholarship for record in watched_records]
         recent_applications = Application.objects.filter(user=user).select_related('scholarship').order_by('-submitted_at')
         recent_apps = list(ApplicationSerializer(recent_applications, many=True, context={'request': request}).data)
         recent_bookmarks = Bookmark.objects.filter(
@@ -255,16 +268,16 @@ class UserViewset(viewsets.ViewSet):
         for item in personal_scrapes:
             scholarship_details = item.scholarship
             normalized_scrapes.append({
-                'id': item['id'],               
-                'status': item['application_status'], 
-                'submitted_at': item['created_at'],
+                'id': item.id,               
+                'status': item.application_status, 
+                'submitted_at': item.created_at,
                 'scholarship': {
-                   
-                    'id': item['scholarship_details']['id'] if item['scholarship_details'] else None,
-                    'title': item['title'],
-                    'link': item['link'],
-                    'reward': item['reward'],
-                    'end_date': item['deadline'],
+                    # Check if relationship exists first
+                    'id': item.scholarship.id if item.scholarship else None,
+                    'title': item.title,
+                    'link': item.link,
+                    'reward': item.reward,
+                    'end_date': item.deadline,
                     'is_official': False 
                 },
                 'is_scrape': True 
@@ -298,6 +311,7 @@ class UserViewset(viewsets.ViewSet):
             'pending_applications': Application.objects.filter(user=user, status='pending').count(),
             'accepted_applications': Application.objects.filter(user=user, status='accepted').count(),
             'rejected_applications': Application.objects.filter(user=user, status='rejected').count(),
+            'profile_completion': user.profile.completion_percentage,
             'submitted_applications': Application.objects.filter(user=user, status='submitted').count(),
         }
 
@@ -313,10 +327,11 @@ class UserViewset(viewsets.ViewSet):
             'bookmarked_scholarships': ScholarshipSerializer(bookmarked_scholarships, many=True, context={'request': request}).data,
             # 'personal_scrapes': ScrapeSubmissionSerializer(personal_scrapes, many=True).data,
             'recent_applications': all_tracked_items,
+            'watched_scholarships': ScholarshipSerializer(watched_scholarships, many=True, context={'request': request}).data
         }
 
         serializer = UserDashBoardSerializer(instance=data)
-        return Response(serializer.data)
+        return Response(data)
 
 
     
@@ -372,5 +387,284 @@ class ScrapeSubmissionViewset(viewsets.ModelViewSet):
             process_new_submission.delay(submission.id)
             return Response({"message": "Saved! Processing for public verification..."}, status=status.HTTP_201_CREATED)
 
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def extract_from_html(request):
+#     raw_html = request.data.get('raw_html')
+#     url = request.data.get('url')
+#     title_from_ext = request.data.get('title', 'Unknown Title')
+
+#     if not raw_html:
+#         return Response({"error": "No HTML provided"}, status=400)
+
+#     # 1. Initialize our unified Extractor
+#     extractor = ScholarshipExtractor(raw_html=raw_html, url=url)
+
+#     # 2. Extract initial structured data from the messy HTML
+#     item = {
+#         "title": extractor.extract_title() or title_from_ext,
+#         "description": extractor.extract_description(),
+#         "reward": extractor.extract_reward(),
+#         "link": url,
+#         "end_date": extractor.extract_date('end'),
+#         "start_date": extractor.extract_date('start'),
+#         "requirements": extractor.extract_requirements(),
+#         "eligibility": extractor.extract_eligibility(),
+#         "tags": extractor.extract_tags(),
+#         "levels": extractor.extract_levels(),
+#         "scraped_at": datetime.now().isoformat(),
+#     }
+
+#     # 3. Quality Check
+#     quality_report = QualityCheck.get_quality_score(
+#         item, 
+#         ["title", "reward", "end_date", "description", "requirements", "eligibility"]
+#     )
+    
+#     # 4. The LLM Engine Integration (Using async_to_sync)
+#     llm_engine = LLMEngine()
+    
+#     if QualityCheck.should_full_regenerate(quality_report):
+#         print(f"Data corrupted. Requesting FULL LLM extraction. Score: {quality_report['quality_score']}")
+        
+#         # async_to_sync wraps the async method so it runs synchronously in this view
+#         recovered_data = async_to_sync(llm_engine.extract_data)(extractor.clean_text, url)
+        
+#         if isinstance(recovered_data, list) and len(recovered_data) > 0:
+#             recovered_data = recovered_data[0]
+            
+#             # Parse dates safely
+#             if recovered_data.get("end_date"):
+#                 recovered_data["end_date"] = dateparser.parse(recovered_data["end_date"]).date()
+#             if recovered_data.get("start_date"):
+#                 recovered_data["start_date"] = dateparser.parse(recovered_data["start_date"]).date()
+            
+#             # Overwrite the weak regex data with the AI data
+#             item.update(recovered_data)
+            
+#     elif quality_report['needs_llm']:
+#         fields_to_fix = list(set(quality_report['failed_fields'] + [x[0] for x in quality_report['low_confidence_fields']]))
+        
+#         if fields_to_fix:
+#             print(f"Asking Gemini to fix: {fields_to_fix}")
+#             recovered_data = async_to_sync(llm_engine.recover_specific_fields)(extractor.clean_text, fields_to_fix)
+            
+#             # Parse dates safely if the AI fixed them
+#             if recovered_data.get("end_date") and isinstance(recovered_data["end_date"], str):
+#                 dt = dateparser.parse(recovered_data["end_date"])
+#                 if dt: recovered_data["end_date"] = dt.date()
+                
+#             if recovered_data.get("start_date") and isinstance(recovered_data["start_date"], str):
+#                 dt = dateparser.parse(recovered_data["start_date"])
+#                 if dt: recovered_data["start_date"] = dt.date()
+                
+#             item.update(recovered_data)
+
+#     # 5. Ensure lists are actually lists before DB insertion
+#     for field in ["requirements", "eligibility", "tags", "levels"]:
+#         if item.get(field) is None:
+#             item[field] = []
+
+#     # 6. Save to Database
+#     try:
+#         scholarship = Scholarship.objects.create(
+#             title=item.get('title', 'Unknown Title')[:255],
+#             link=item.get('link', url),
+#             description=item.get('description', 'No description'),
+#             eligibility=item.get('eligibility', []),
+#             requirements=item.get('requirements', []),
+#             reward=item.get('reward', ''),
+#             tags=item.get('tags', []),
+#             levels=item.get('levels', []),
+#             source="Chrome Extension",
+#             status="active",
+#             end_date=item.get('end_date'),
+#             start_date=item.get('start_date')
+#         )
+
+#         return Response({
+#             "message": "Successfully extracted and saved!", 
+#             "id": scholarship.id
+#         }, status=201)
+        
+#     except Exception as e:
+#         print(f"Error saving scholarship: {str(e)}")
+#         return Response({"error": "Failed to save to database."}, status=500)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def extract_from_html(request):
+    raw_html        = request.data.get("raw_html")
+    url             = request.data.get("url", "")
+    title_from_ext  = request.data.get("title", "Unknown Title")
+
+    if not raw_html:
+        return Response({"error": "No HTML provided"}, status=400)
+
+    # ── 1. Extract with the shared engine ────────────────────────────────────
+    extractor = ScholarshipExtractor(raw_html=raw_html, url=url)
+
+    item = {
+        "title":        extractor.extract_title() or title_from_ext,
+        "description":  extractor.extract_description(),
+        "reward":       extractor.extract_reward(),
+        "link":         url,
+        "end_date":     extractor.extract_date("end"),
+        "start_date":   extractor.extract_date("start"),
+        "requirements": extractor.extract_requirements(),
+        "eligibility":  extractor.extract_eligibility(),
+        "tags":         extractor.extract_tags(),
+        "levels":       extractor.extract_levels(),
+        "scraped_at":   datetime.now().isoformat(),
+    }
+
+    # ── 2. Quality check ──────────────────────────────────────────────────────
+    quality_report = QualityCheck.get_quality_score(
+        item,
+        ["title", "reward", "end_date", "description", "requirements", "eligibility"],
+    )
+    llm_engine = LLMEngine()
+
+    if QualityCheck.should_full_regenerate(quality_report):
+        print(f"Data corrupted — full LLM extraction. Score: {quality_report['quality_score']}")
+        recovered = async_to_sync(llm_engine.extract_data)(extractor.clean_text, url)
+        if isinstance(recovered, list) and recovered:
+            recovered = recovered[0]
+        _parse_dates_inplace(recovered)
+        item.update(recovered)
+
+    elif quality_report["needs_llm"]:
+        fields = list(set(
+            quality_report["failed_fields"]
+            + [f for f, _ in quality_report["low_confidence_fields"]]
+        ))
+        if fields:
+            print(f"Partial LLM fix for: {fields}")
+            recovered = async_to_sync(llm_engine.recover_specific_fields)(
+                extractor.clean_text, fields
+            )
+            _parse_dates_inplace(recovered)
+            item.update(recovered)
+
+    # ── 3. Guard rails ────────────────────────────────────────────────────────
+    for field in ["requirements", "eligibility", "tags", "levels"]:
+        if item.get(field) is None:
+            item[field] = []
+
+    # ── 4. Persist ────────────────────────────────────────────────────────────
+    try:
+        scholarship = Scholarship.objects.create(
+            title=item.get("title", "Unknown Title")[:255],
+            link=item.get("link", url),
+            description=item.get("description", "No description"),
+            eligibility=item.get("eligibility", []),
+            requirements=item.get("requirements", []),
+            reward=item.get("reward", ""),
+            tags=item.get("tags", []),
+            levels=item.get("levels", []),
+            source="Chrome Extension",
+            status="active",
+            end_date=item.get("end_date"),
+            start_date=item.get("start_date"),
+        )
+        return Response({"message": "Successfully extracted and saved!", "id": scholarship.id}, status=201)
+
+    except Exception as e:
+        print(f"DB save error: {e}")
+        return Response({"error": "Failed to save to database."}, status=500)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared helper (also used by the spider)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_dates_inplace(data: dict) -> None:
+    for key in ("end_date", "start_date"):
+        val = data.get(key)
+        if isinstance(val, str):
+            dt = dateparser.parse(val)
+            data[key] = dt.date() if dt else None
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def draft_application_essays(request):
+    """
+    POST /api/scholarships/draft_essays/
+
+    Body:
+        {
+            "prompts": [
+                {"id": "scholarscope-ta-0", "prompt": "Why do you deserve this?", "max_words": 200},
+                ...
+            ]
+        }
+
+    Returns:
+        {
+            "drafts": [
+                {"id": "...", "draft": "...", "word_count": 143, "confidence": "high"},
+                ...
+            ],
+            "profile_completeness": 72   // % of profile fields filled — UI can warn user
+        }
+    """
+    prompts_list = request.data.get("prompts", [])
+
+    if not prompts_list:
+        return Response({"error": "No prompts provided."}, status=400)
+
+    if len(prompts_list) > 10:
+        return Response({"error": "Maximum 10 prompts per request."}, status=400)
+
+    # ── Build user profile from the authenticated user ──────────────────────
+    user = request.user
+
+    # Safely access the related profile — handle missing profile gracefully
+    profile = getattr(user, "profile", None)
+    def prof(attr, default=""):
+        return getattr(profile, attr, default) if profile else default
+
+    user_profile = {
+        "first_name":      user.first_name,
+        "last_name":       user.last_name,
+        "field_of_study":  prof("field_of_study"),
+        "institution":     prof("institution"),
+        "year_of_study":   prof("year_of_study"),
+        "gpa":             prof("gpa"),
+        "country":         prof("country"),
+        "bio":             prof("bio"),
+        "achievements":    prof("achievements"),
+        "career_goals":    prof("career_goals"),
+        "extracurriculars":prof("extracurriculars"),
+        "financial_need":  prof("financial_need"),
+    }
+
+    # Compute profile completeness score so the frontend can warn sparse users
+    key_fields = ["bio", "achievements", "career_goals", "extracurriculars", "field_of_study", "institution"]
+    filled = sum(1 for f in key_fields if user_profile.get(f))
+    completeness_pct = round((filled / len(key_fields)) * 100)
+
+    # Warn, but still proceed — let the LLM do its best with what's available
+    if completeness_pct < 30:
+        logger.warning(
+            f"User {user.id} has a very sparse profile ({completeness_pct}%) — essay quality will be low."
+        )
+
+    # ── Call LLM ────────────────────────────────────────────────────────────
+    llm = LLMEngine()
+
+    try:
+        drafted_responses = async_to_sync(llm.draft_essays)(user_profile, prompts_list)
+    except Exception as exc:
+        logger.exception(f"draft_application_essays: LLM failure for user {user.id}: {exc}")
+        return Response({"error": "Essay drafting failed. Please try again."}, status=500)
+
+    # Surface any per-prompt failures without crashing the whole response
+    failures = [d for d in drafted_responses if d.get("confidence") == "failed"]
+    if failures:
+        logger.warning(f"{len(failures)} prompt(s) failed for user {user.id}: {failures}")
+
+    return Response({
+        "drafts":               drafted_responses,
+        "profile_completeness": completeness_pct,
+    }, status=200)

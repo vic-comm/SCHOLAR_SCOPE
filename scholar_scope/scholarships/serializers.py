@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Scholarship, Application, Bookmark, User, Profile, SiteConfig, ScrapeSubmission
+from .models import Scholarship, Application, Bookmark, User, Profile, SiteConfig, ScrapeSubmission, WatchedScholarship
 from .models import Profile, Level, Tag
 
 class SiteConfigSerializer(serializers.ModelSerializer):
@@ -10,9 +10,12 @@ class SiteConfigSerializer(serializers.ModelSerializer):
 class ScholarshipSerializer(serializers.ModelSerializer):
     is_bookmarked = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
+    tags = serializers.StringRelatedField(many=True, read_only=True)
+    is_watched = serializers.SerializerMethodField()
+
     class Meta:
         model = Scholarship
-        fields = ['id','title','start_date','end_date','tags','description','reward','active','link', 'eligibility', 'is_bookmarked', 'is_saved']
+        fields = ['id','title','start_date','end_date','tags','description','reward','active','link', 'eligibility', 'is_bookmarked', 'is_saved', 'is_watched']
     
     def get_is_bookmarked(self, obj):
         request = self.context['request']
@@ -26,6 +29,12 @@ class ScholarshipSerializer(serializers.ModelSerializer):
         if request.user.is_authenticated:
             user = self.context['request'].user
             return Application.objects.filter(user=user, scholarship=obj).exists()
+        return False
+    
+    def get_is_watched(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return WatchedScholarship.objects.filter(user=request.user, scholarship=obj).exists()
         return False
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -68,9 +77,20 @@ class UserSerializer(serializers.ModelSerializer):
     applied_scholarships = ScholarshipSerializer(many=True, read_only=True)
     bookmarked_scholarships = ScholarshipSerializer(many=True, read_only=True)
     recent_submissions = ScrapeSubmissionSerializer(many=True)
+    is_onboarded = serializers.SerializerMethodField()
+    profile_completion = serializers.IntegerField(source='profile.completion_percentage', read_only=True)
     class Meta:
         model = User
-        fields = ['is_admin', 'applied_scholarships', 'bookmarked_scholarships']
+        fields = ['is_admin', 'applied_scholarships', 'bookmarked_scholarships', 'is_onboarded', 'profile_completion']
+
+    def get_is_onboarded(self, obj):
+        try:
+            profile = obj.profile
+            if profile.field_of_study and profile.embedding is not None:
+                return True
+            return False
+        except Exception:
+            return False
 
 class UserDashBoardSerializer(serializers.Serializer):
     recent_applications = serializers.ListField()
@@ -86,6 +106,7 @@ class ApplicationStatusSerializer(serializers.ModelSerializer):
         fields = ['status']
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
+    completion_percentage = serializers.ReadOnlyField()
     class Meta:
         model= Profile
         exclude = ['created_at', 'updated_at', 'user']
