@@ -24,3 +24,10 @@ app.autodiscover_tasks()
 
 # We used CELERY_BEAT_SCHEDULER in settings.py instead of:
 # app.conf.beat_scheduler = ''django_celery_beat.schedulers.DatabaseScheduler'
+
+# settings.py or celery.py
+CELERY_TASK_ROUTES = {
+    'scholarships.draft_single_essay': {'queue': 'llm'},
+    'scholarships.draft_essays_batch': {'queue': 'llm'},
+    'scholarships.collect_essay_results': {'queue': 'llm'},
+}

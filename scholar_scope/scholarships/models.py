@@ -242,12 +242,70 @@ class Profile(models.Model):
     graduation_year = models.PositiveIntegerField(null=True, blank=True)
     preferred_countries = models.TextField(blank=True, help_text="Countries where user prefers scholarships")
     preferred_scholarship_types = models.TextField(blank=True, help_text="Merit-based, Need-based, Research, etc.")
-    bio = models.TextField(blank=True)
     profile_picture = models.ImageField(upload_to="profiles/", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     embedding = VectorField(dimensions=384, null=True, blank=True)
+    bio = models.TextField(
+        blank=True,
+        help_text="Short personal summary (2-3 sentences). Shown publicly."
+    )
     
+    # Structured narrative chunks — these become your RAG corpus
+    leadership_experience = models.TextField(
+        blank=True,
+        help_text="Describe a time you led a team or initiative."
+    )
+    academic_achievements = models.TextField(
+        blank=True,
+        help_text="Awards, honours, GPA, publications, research."
+    )
+    financial_need_statement = models.TextField(
+        blank=True,
+        help_text="Optional. Describe your financial background if relevant."
+    )
+    career_goals = models.TextField(
+        blank=True,
+        help_text="What do you want to do in 5-10 years and why."
+    )
+    community_impact = models.TextField(
+        blank=True,
+        help_text="Volunteering, social impact, community work."
+    )
+    challenges_overcome = models.TextField(
+        blank=True,
+        help_text="A significant obstacle you faced and how you dealt with it."
+    )
+    research_experience = models.TextField(
+        blank=True,
+        help_text="Research projects, papers, labs, supervisors."
+    )
+    extracurriculars = models.TextField(
+        blank=True,
+        help_text="Clubs, sports, hobbies, side projects."
+    )
+    
+    # Skills as structured data rather than buried in bio
+    technical_skills = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="['Python', 'Django', 'Machine Learning']"
+    )
+    languages_spoken = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="[{'language': 'English', 'level': 'Native'}]"
+    )
+    gpa = models.DecimalField(
+        max_digits=4, decimal_places=2,
+        null=True, blank=True,
+        help_text="On a 4.0 or 5.0 scale — specify in gpa_scale."
+    )
+    gpa_scale = models.DecimalField(
+        max_digits=3, decimal_places=1,
+        null=True, blank=True,
+        default=4.0
+    )
     @property
     def completion_percentage(self):
         fields_to_check = [
@@ -267,6 +325,39 @@ class Profile(models.Model):
     
     def __str__(self):
         return f"{self.user.username}'s Profile"
+
+
+class ProfileChunk(models.Model):
+    """
+    A single embedded narrative chunk from a user's profile.
+    One row per field per user.
+    """
+    CHUNK_TYPES = [
+        ("leadership",        "Leadership Experience"),
+        ("academic",          "Academic Achievements"),
+        ("financial_need",    "Financial Need"),
+        ("career_goals",      "Career Goals"),
+        ("community_impact",  "Community Impact"),
+        ("challenges",        "Challenges Overcome"),
+        ("research",          "Research Experience"),
+        ("extracurriculars",  "Extracurriculars"),
+        ("bio",               "Bio Summary"),
+    ]
+
+    profile    = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="chunks")
+    chunk_type = models.CharField(max_length=50, choices=CHUNK_TYPES)
+    text       = models.TextField()
+    embedding  = VectorField(dimensions=384, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("profile", "chunk_type")
+        indexes = [
+            models.Index(fields=["profile", "chunk_type"]),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.user.username} — {self.chunk_type}"
 
    
 
@@ -349,14 +440,9 @@ class ScrapeSubmission(models.Model):
     title = models.CharField(max_length=500)
     raw_data = models.JSONField()
     
-    status = models.CharField(
-        max_length=20, 
-        choices=[('PENDING', 'Pending'), ('APPROVED', 'Approved'), ('REJECTED', 'Rejected')],
-        default='PENDING'
-    )
     VERIFICATION_CHOICES = [
         ('PENDING', 'Pending Review'),
-        ('APPROVED', 'Approved (Public)'),
+        ('APPROVED', 'Approved'),
         ('REJECTED', 'Rejected'),
     ]
     status = models.CharField(max_length=20, choices=VERIFICATION_CHOICES, default='PENDING')
@@ -365,6 +451,7 @@ class ScrapeSubmission(models.Model):
         ('submitted', 'Submitted'),  
         ('rejected', 'Rejected'),    
         ('accepted', 'Accepted'),]
+    
     application_status = models.CharField(
         max_length=20, 
         choices=APPLICATION_STATUS_CHOICES, 

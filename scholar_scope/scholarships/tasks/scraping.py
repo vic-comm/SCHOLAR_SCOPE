@@ -1,16 +1,21 @@
 import sys
 import os
-import logging
 import multiprocessing 
 from celery import shared_task
 from scrapy.crawler import CrawlerProcess
-import numpy as np
 from django.utils import timezone
-from sklearn.metrics.pairwise import cosine_similarity
 from datetime import timedelta
 from django.core.mail import send_mail
-logger = logging.getLogger(__name__)
+from asgiref.sync import async_to_sync
+import dateparser
+from datetime import date
+from celery.utils.log import get_task_logger
 
+logger = get_task_logger(__name__)
+
+# Fixed — configure once at module level, reuse model
+import google.generativeai as genai
+import os
 
 def should_abort_request(request):
     """
@@ -125,64 +130,6 @@ def scrape_all_sources():
     for site in sources:
         scrape_site.delay(site_config_id=site.id)
 
-
-@shared_task(bind=True)
-def send_email_reminder(self):
-    from scholarships.services import ScholarshipEmailService
-    try:
-        return ScholarshipEmailService.send_bulk_reminders()
-    except Exception as e:
-        raise self.retry(exc=e, countdown=300, max_retries=2)
-    
-@shared_task(bind=True)
-def send_deadline_reminder(self):
-    from scholarships.services import ScholarshipEmailService
-    try:
-        return ScholarshipEmailService.send_deadline_reminder()
-    except Exception as e:
-        raise self.retry(exc=e, countdown=300, max_retries=2)
-    
-@shared_task
-def outdated_scholarships():
-    from scholarships.models import Scholarship
-    from django.utils import timezone
-    from datetime import timedelta
-    
-    outdated = Scholarship.objects.filter(end_date__lte= timezone.now() - timedelta(days=30))
-    for sch in outdated:
-        sch.active = False
-        sch.save()
-
-@shared_task
-def generate_scholarship_embedding(scholarship_id):
-    from scholarships.models import Scholarship
-    from scholarships.utils import get_text_embedding
-    
-    s = Scholarship.objects.get(id=scholarship_id)
-    text = f"{s.title}. {s.description}. {s.eligibility or ''}. {s.requirements or ''}"
-    s.embedding = get_text_embedding(text)
-    s.save(update_fields=["embedding"])
-
-@shared_task
-def generate_profile_embedding(profile_id):
-    from scholarships.models import Profile
-    from scholarships.utils import get_text_embedding
-    from django.core.cache import cache
-    
-    profile = Profile.objects.get(id=profile_id)
-    text = f"{profile.field_of_study}. {profile.bio}. {profile.preferred_scholarship_types}. {profile.preferred_countries}"
-    profile.embedding = get_text_embedding(text)
-    profile.save(update_fields=["embedding", "updated_at"])
-    # Note: Ensure _rec_cache_key logic is consistent or imported locally
-    cache.delete(f"user_recommendations_{profile.user.id}")
-
-@shared_task
-def batch_invalidate_user_recommendations(user_ids):
-    from django.core.cache import cache
-    from scholarships.utils import _rec_cache_key
-    for uid in user_ids:
-        cache.delete(_rec_cache_key(uid))
-
 @shared_task
 def finalize_scrape_event(results, scrape_event_id):
     from scholarships.models import ScholarshipScrapeEvent, FailedScholarship
@@ -190,61 +137,7 @@ def finalize_scrape_event(results, scrape_event_id):
     failed = FailedScholarship.objects.filter(scrape_event=event).exists()
     if failed:
         event.mark_partial("Some scholarships failed — see FailedScholarship table")
-    else:
-        event.mark_success()
     return "Scrape event completed"
-
-@shared_task
-def remove_semantic_duplicates(threshold=0.95):
-    from scholarships.models import Scholarship
-    print("Starting Semantic Deduplication...")
-    scholarships = list(Scholarship.objects.filter(
-        active=True, 
-        embedding__isnull=False
-    ).values('id', 'title', 'embedding', 'description'))
-    
-    if len(scholarships) < 2:
-        return "Not enough items to check."
-
-
-    embeddings = np.array([s['embedding'] for s in scholarships])
-    ids = [s['id'] for s in scholarships]
-    
-    similarity_matrix = cosine_similarity(embeddings)
-    
-    upper_triangle = np.triu(similarity_matrix, k=1)
-    
-    duplicate_indices = np.where(upper_triangle > threshold)
-    
-    deleted_count = 0
-    deleted_ids = set()
-
-    # Zip turns the two arrays into pairs of (i, j)
-    for i, j in zip(*duplicate_indices):
-        id_a = ids[i]
-        id_b = ids[j]
-        
-        # Skip if we already deleted one of them
-        if id_a in deleted_ids or id_b in deleted_ids:
-            continue
-            
-        item_a = scholarships[i]
-        item_b = scholarships[j]
-        
-        print(f"MATCH FOUND ({upper_triangle[i][j]:.3f}):")
-        print(f"   A: {item_a['title']}")
-        print(f"   B: {item_b['title']}")
-        
-        
-        len_a = len(item_a['description'] or "")
-        len_b = len(item_b['description'] or "")
-        
-        id_to_delete = id_b if len_a >= len_b else id_a
-        
-        Scholarship.objects.filter(id=id_to_delete).delete()
-        deleted_ids.add(id_to_delete)
-        deleted_count += 1
-    return f"Cleanup Complete. Removed {deleted_count} semantic duplicates."
 
 @shared_task
 def send_weekly_renewal_notifications():
@@ -296,20 +189,52 @@ def send_weekly_renewal_notifications():
 
     return f"Sent {emails_sent} renewal notifications."
 
-# tasks.py
 @shared_task
 def process_new_submission(submission_id):
     from scholarships.models import ScrapeSubmission, Scholarship, Application, Tag, Level
-    from scholar_scope.scholarscope_scrapers.scholarscope_scrapers.utils.quality import QualityCheck
-    from scholar_scope.scholarscope_scrapers.scholarscope_scrapers.utils.llm_engine import LLMEngine
+    from scholarscope_scrapers.scholarscope_scrapers.utils.quality import QualityCheck
+    from scholarscope_scrapers.scholarscope_scrapers.utils.llm_engine import LLMEngine
+    from scholarships.utils import ScholarshipExtractor
     
     try:
         sub = ScrapeSubmission.objects.get(id=submission_id)
         if sub.status != 'PENDING': return
 
+        # 1. ── PRE-PROCESSING: Convert HTML to Dictionary if necessary ──
+        working_data = dict(sub.raw_data) # Create a working copy
+        text_for_llm = "" # Cache this in case the LLM needs to read it later
+
+        if 'raw_html' in working_data:
+            print(f"Submission {sub.id}: 'raw_html' detected. Running Extractor.")
+            raw_html = working_data.pop('raw_html')
+            extractor = ScholarshipExtractor(raw_html=raw_html, url=sub.link)
+            text_for_llm = extractor.clean_text
+            
+            # Map the extracted fields into the dictionary
+            working_data.update({
+                'title': extractor.extract_title() or working_data.get('title'),
+                'description': extractor.extract_description(),
+                'reward': extractor.extract_reward(),
+                'end_date': extractor.extract_date('end'),
+                'start_date': extractor.extract_date('start'),
+                'requirements': extractor.extract_requirements(),
+                'eligibility': extractor.extract_eligibility(),
+                'tags': extractor.extract_tags(),
+                'level': extractor.extract_levels(), 
+            })
+            
+            # Dates must be strings for the QualityCheck and JSON saving
+            for date_field in ['end_date', 'start_date']:
+                if isinstance(working_data.get(date_field), date):
+                    working_data[date_field] = working_data[date_field].isoformat()
+        else:
+            # Manual Mode: Just use the highlighted text as the fallback context
+            text_for_llm = str(working_data)
+
+        # 2. ── EXISTING QUALITY CHECK ──
         quality_report = QualityCheck.get_quality_score(
-            sub.raw_data, 
-            critical_fields=['title', 'link', 'description', 'reward', 'eligibility', 'requirements', 'end_date', 'start_date']
+            working_data, 
+            critical_fields=['title', 'link', 'description', 'reward', 'eligibility', 'requirements']
         )
         
         if quality_report.get('is_garbage_content'):
@@ -322,12 +247,14 @@ def process_new_submission(submission_id):
         ai_data = {}
         is_valid_scholarship = False
 
+        # 3. ── AI FALLBACK LOOP ──
         if QualityCheck.should_full_regenerate(quality_report):
-            print(f"Submission {sub.id}: Poor parsing detected. Attempting Full AI Regeneration.")
-            ai_result = llm_engine.extract_all(sub.raw_data)
+            print(f"Submission {sub.id}: Poor parsing detected. Full AI Regeneration.")
+            # Note: Using async_to_sync because LLMEngine is typically asynchronous
+            ai_result = async_to_sync(llm_engine.extract_data)(text_for_llm, sub.link)
             
-            if ai_result.get('is_valid'):
-                ai_data = ai_result
+            if isinstance(ai_result, list) and len(ai_result) > 0:
+                ai_data = ai_result[0]
                 is_valid_scholarship = True
             else:
                 sub.status = 'REJECTED'
@@ -337,55 +264,68 @@ def process_new_submission(submission_id):
 
         elif len(quality_report['failed_fields']) > 0:
             print(f"Submission {sub.id}: Mostly good, recovering fields: {quality_report['failed_fields']}")
-            recovered_data = llm_engine.recover_specific_fields(
-                sub.raw_data, 
+            recovered_data = async_to_sync(llm_engine.recover_specific_fields)(
+                text_for_llm, 
                 fields_to_fix=quality_report['failed_fields']
             )
-            ai_data = {**sub.raw_data, **recovered_data}
+            ai_data = {**working_data, **recovered_data}
             is_valid_scholarship = True
             
         else:
             print(f"Submission {sub.id}: High quality, auto-approving.")
-            ai_data = sub.raw_data
+            ai_data = working_data
             is_valid_scholarship = True
+
+        # 4. ── DATABASE SAVING ──
+        def safe_parse_date(d):
+            if not d: return None
+            if isinstance(d, str):
+                parsed = dateparser.parse(d)
+                return parsed.date() if parsed else None
+            return d
 
         if is_valid_scholarship:
             tags_list = ai_data.get('tags', [])
-            levels_list = ai_data.get('level', [])
+            levels_list = ai_data.get('level', []) or ai_data.get('levels', [])
             
             scholarship, created = Scholarship.objects.update_or_create(
                 link=sub.link,
                 defaults={
-                    'title': ai_data.get('title'),
-                    'description': ai_data.get('description'),
-                    'eligibility': ai_data.get('eligibility'), 
-                    'requirements': ai_data.get('requirements'),
-                    'reward': ai_data.get('reward'),
-                    'start_date': ai_data.get('start_date'),
-                    'end_date': ai_data.get('end_date'),
+                    'title': (ai_data.get('title') or "Unknown")[:500],
+                    'description': ai_data.get('description', ''),
+                    'eligibility': ai_data.get('eligibility', []), 
+                    'requirements': ai_data.get('requirements', []),
+                    'reward': ai_data.get('reward', '')[:1000],
+                    'start_date': safe_parse_date(ai_data.get('start_date')),
+                    'end_date': safe_parse_date(ai_data.get('end_date')),
                     'active': True 
                 }
             )
             
+            # Update Many-to-Many fields
             scholarship.level.clear() 
             for lvl_name in levels_list:
                 if lvl_name:
-                    clean_name = str(lvl_name).strip().title()
-                    level_obj, _ = Level.objects.get_or_create(name=clean_name)
+                    level_obj, _ = Level.objects.get_or_create(name=str(lvl_name).strip().title())
                     scholarship.level.add(level_obj)
 
             scholarship.tags.clear() 
             for tag_name in tags_list:
                 if tag_name:
-                    clean_tag = str(tag_name).strip().title()
-                    tag_obj, _ = Tag.objects.get_or_create(name=clean_tag)
+                    tag_obj, _ = Tag.objects.get_or_create(name=str(tag_name).strip().title())
                     scholarship.tags.add(tag_obj)
 
+            # Finalize submission status
             sub.scholarship = scholarship
             sub.status = 'APPROVED'
-            sub.raw_data.update(ai_data) 
+            
+            # Remove raw_html from the DB to save massive amounts of Postgres storage space
+            if 'raw_html' in ai_data: del ai_data['raw_html']
+            sub.raw_data = ai_data 
+            
             sub.save()
             
+            # Ensure it shows up on the user's board
             Application.objects.get_or_create(
                 user=sub.user, 
                 scholarship=scholarship,
@@ -394,3 +334,9 @@ def process_new_submission(submission_id):
 
     except ScrapeSubmission.DoesNotExist:
         pass
+    except Exception as e:
+        print(f"CRITICAL ERROR in process_new_submission {submission_id}: {str(e)}")
+        # Optionally mark as rejected on catastrophic failure
+        sub.status = 'REJECTED'
+        sub.raw_data['error'] = str(e)
+        sub.save()

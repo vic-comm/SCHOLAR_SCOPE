@@ -27,8 +27,11 @@ import datetime
 import dateparser
 from .models import Scholarship
 from .utils import ScholarshipExtractor
-from ..scholarscope_scrapers.scholarscope_scrapers.utils.llm_engine import LLMEngine
-from ..scholarscope_scrapers.scholarscope_scrapers.utils.quality import QualityCheck
+from scholarscope_scrapers.scholarscope_scrapers.utils.llm_engine import LLMEngine
+from scholarscope_scrapers.scholarscope_scrapers.utils.quality import QualityCheck
+import uuid
+from django.core.cache import cache
+from scholarships.tasks import draft_essays_batch
 import logging
 
 logger = logging.getLogger(__name__)
@@ -61,58 +64,58 @@ class ScholarshipViewset(viewsets.ModelViewSet):
         else:
             return [IsAdminUser()]
     
-    # def get_queryset(self):
-    #     queryset = Scholarship.objects.all()
-
-    #     query = self.request.query_params.get("q")
-    #     level = self.request.query_params.get("level")
-    #     tag = self.request.query_params.get("tag")
-
-    #     if level:
-    #         queryset = queryset.filter(level__level__iexact=level)
-    #     if tag:
-    #         queryset = queryset.filter(tags__name__iexact=tag)
-
-    #     if query:
-    #         search_vector = (
-    #             SearchVector("title", weight="A") +
-    #             SearchVector("description", weight="B") +
-    #             SearchVector("tags__name", weight="C")
-    #         )
-    #         search_query = SearchQuery(query)
-            
-    #         queryset = (
-    #             queryset
-    #             .annotate(rank=SearchRank(search_vector, search_query))
-    #             .filter(rank__gte=0.1) 
-    #             .order_by("-rank", "-created_at") 
-    #             .distinct()
-    #         )
-    #     else:
-    #         queryset = queryset.order_by("-created_at")
-
-    #     return queryset
     def get_queryset(self):
         queryset = Scholarship.objects.all()
-        
-        query = self.request.query_params.get('q')
-        level = self.request.query_params.get('level') 
-        tag = self.request.query_params.get('tag')        
-        
-        if query:
-            queryset = queryset.filter(
-                Q(title__icontains=query) |
-                Q(description__icontains=query) |
-                Q(tags__name__icontains=query)
-            ).distinct()
-            
+
+        query = self.request.query_params.get("q")
+        level = self.request.query_params.get("level")
+        tag = self.request.query_params.get("tag")
+
         if level:
             queryset = queryset.filter(level__level__iexact=level)
-            
         if tag:
             queryset = queryset.filter(tags__name__iexact=tag)
+
+        if query:
+            search_vector = (
+                SearchVector("title", weight="A") +
+                SearchVector("description", weight="B") +
+                SearchVector("tags__name", weight="C")
+            )
+            search_query = SearchQuery(query)
             
-        return queryset.order_by('-created_at')
+            queryset = (
+                queryset
+                .annotate(rank=SearchRank(search_vector, search_query))
+                .filter(rank__gte=0.1) 
+                .order_by("-rank", "-created_at") 
+                .distinct()
+            )
+        else:
+            queryset = queryset.order_by("-created_at")
+
+        return queryset
+    # def get_queryset(self):
+    #     queryset = Scholarship.objects.all()
+        
+    #     query = self.request.query_params.get('q')
+    #     level = self.request.query_params.get('level') 
+    #     tag = self.request.query_params.get('tag')        
+        
+    #     if query:
+    #         queryset = queryset.filter(
+    #             Q(title__icontains=query) |
+    #             Q(description__icontains=query) |
+    #             Q(tags__name__icontains=query)
+    #         ).distinct()
+            
+    #     if level:
+    #         queryset = queryset.filter(level__level__iexact=level)
+            
+    #     if tag:
+    #         queryset = queryset.filter(tags__name__iexact=tag)
+            
+    #     return queryset.order_by('-created_at')
     
     @action(detail=True, methods=['post'])
     def bookmark_scholarship(self, request, pk=None):
@@ -140,18 +143,6 @@ class ScholarshipViewset(viewsets.ModelViewSet):
         application = get_object_or_404(Application, user=request.user, scholarship=scholarship)
         application.delete()
         return Response({'message':'Scholarship saved'})
-
-    # @action(detail=True, methods=['get'])
-    # def details(self, request, pk=None):
-    #     scholarship = self.get_object()
-    #     data = self.get_serializer(scholarship).data
-
-    #     similar = Scholarship.objects.filter(Q(tags__in=scholarship.tags.all()) | Q(level__in=scholarship.level.all())).exclude(id=scholarship.id)\
-    #                             .annotate(match_count = Count('tags', filter=Q(tags__in=scholarship.tags.all()))).order_by('-match_count', 'end_date').distinct()[:10]
-    #     recommended = get_cached_recommendations(request.user)[:5]
-    #     similar_data = self.get_serializer(similar, many=True).data
-    #     recommended_data = self.get_serializer(recommended, many=True).data
-    #     return Response({'data':data, 'similar_scholarships':similar_data, 'recommended_scholarships':recommended_data})
     
     @action(detail=True, methods=['get'])
     def details(self, request, pk=None):
@@ -243,7 +234,6 @@ class UserViewset(viewsets.ViewSet):
         if request.method == 'POST':
             serializer = ProfileUpdateSerializer(data=request.data, instance=profile, partial=True)
             if serializer.is_valid():
-                # serializer.user = request.user
                 serializer.save()
                 return Response(serializer.data)
             return Response(serializer.errors)
@@ -276,8 +266,8 @@ class UserViewset(viewsets.ViewSet):
                     'id': item.scholarship.id if item.scholarship else None,
                     'title': item.title,
                     'link': item.link,
-                    'reward': item.reward,
-                    'end_date': item.deadline,
+                    'reward': getattr(item, 'reward', None),
+                    'end_date': getattr(item, 'dealine', None),
                     'is_official': False 
                 },
                 'is_scrape': True 
@@ -365,7 +355,7 @@ class ScrapeSubmissionViewset(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         data = request.data
-        link = data.get('link')
+        link = data.get('url')
 
         submission = ScrapeSubmission.objects.create(
             user=request.user,
@@ -387,109 +377,6 @@ class ScrapeSubmissionViewset(viewsets.ModelViewSet):
             process_new_submission.delay(submission.id)
             return Response({"message": "Saved! Processing for public verification..."}, status=status.HTTP_201_CREATED)
 
-# @api_view(['POST'])
-# @permission_classes([IsAuthenticated])
-# def extract_from_html(request):
-#     raw_html = request.data.get('raw_html')
-#     url = request.data.get('url')
-#     title_from_ext = request.data.get('title', 'Unknown Title')
-
-#     if not raw_html:
-#         return Response({"error": "No HTML provided"}, status=400)
-
-#     # 1. Initialize our unified Extractor
-#     extractor = ScholarshipExtractor(raw_html=raw_html, url=url)
-
-#     # 2. Extract initial structured data from the messy HTML
-#     item = {
-#         "title": extractor.extract_title() or title_from_ext,
-#         "description": extractor.extract_description(),
-#         "reward": extractor.extract_reward(),
-#         "link": url,
-#         "end_date": extractor.extract_date('end'),
-#         "start_date": extractor.extract_date('start'),
-#         "requirements": extractor.extract_requirements(),
-#         "eligibility": extractor.extract_eligibility(),
-#         "tags": extractor.extract_tags(),
-#         "levels": extractor.extract_levels(),
-#         "scraped_at": datetime.now().isoformat(),
-#     }
-
-#     # 3. Quality Check
-#     quality_report = QualityCheck.get_quality_score(
-#         item, 
-#         ["title", "reward", "end_date", "description", "requirements", "eligibility"]
-#     )
-    
-#     # 4. The LLM Engine Integration (Using async_to_sync)
-#     llm_engine = LLMEngine()
-    
-#     if QualityCheck.should_full_regenerate(quality_report):
-#         print(f"Data corrupted. Requesting FULL LLM extraction. Score: {quality_report['quality_score']}")
-        
-#         # async_to_sync wraps the async method so it runs synchronously in this view
-#         recovered_data = async_to_sync(llm_engine.extract_data)(extractor.clean_text, url)
-        
-#         if isinstance(recovered_data, list) and len(recovered_data) > 0:
-#             recovered_data = recovered_data[0]
-            
-#             # Parse dates safely
-#             if recovered_data.get("end_date"):
-#                 recovered_data["end_date"] = dateparser.parse(recovered_data["end_date"]).date()
-#             if recovered_data.get("start_date"):
-#                 recovered_data["start_date"] = dateparser.parse(recovered_data["start_date"]).date()
-            
-#             # Overwrite the weak regex data with the AI data
-#             item.update(recovered_data)
-            
-#     elif quality_report['needs_llm']:
-#         fields_to_fix = list(set(quality_report['failed_fields'] + [x[0] for x in quality_report['low_confidence_fields']]))
-        
-#         if fields_to_fix:
-#             print(f"Asking Gemini to fix: {fields_to_fix}")
-#             recovered_data = async_to_sync(llm_engine.recover_specific_fields)(extractor.clean_text, fields_to_fix)
-            
-#             # Parse dates safely if the AI fixed them
-#             if recovered_data.get("end_date") and isinstance(recovered_data["end_date"], str):
-#                 dt = dateparser.parse(recovered_data["end_date"])
-#                 if dt: recovered_data["end_date"] = dt.date()
-                
-#             if recovered_data.get("start_date") and isinstance(recovered_data["start_date"], str):
-#                 dt = dateparser.parse(recovered_data["start_date"])
-#                 if dt: recovered_data["start_date"] = dt.date()
-                
-#             item.update(recovered_data)
-
-#     # 5. Ensure lists are actually lists before DB insertion
-#     for field in ["requirements", "eligibility", "tags", "levels"]:
-#         if item.get(field) is None:
-#             item[field] = []
-
-#     # 6. Save to Database
-#     try:
-#         scholarship = Scholarship.objects.create(
-#             title=item.get('title', 'Unknown Title')[:255],
-#             link=item.get('link', url),
-#             description=item.get('description', 'No description'),
-#             eligibility=item.get('eligibility', []),
-#             requirements=item.get('requirements', []),
-#             reward=item.get('reward', ''),
-#             tags=item.get('tags', []),
-#             levels=item.get('levels', []),
-#             source="Chrome Extension",
-#             status="active",
-#             end_date=item.get('end_date'),
-#             start_date=item.get('start_date')
-#         )
-
-#         return Response({
-#             "message": "Successfully extracted and saved!", 
-#             "id": scholarship.id
-#         }, status=201)
-        
-#     except Exception as e:
-#         print(f"Error saving scholarship: {str(e)}")
-#         return Response({"error": "Failed to save to database."}, status=500)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -501,7 +388,6 @@ def extract_from_html(request):
     if not raw_html:
         return Response({"error": "No HTML provided"}, status=400)
 
-    # ── 1. Extract with the shared engine ────────────────────────────────────
     extractor = ScholarshipExtractor(raw_html=raw_html, url=url)
 
     item = {
@@ -585,86 +471,141 @@ def _parse_dates_inplace(data: dict) -> None:
             dt = dateparser.parse(val)
             data[key] = dt.date() if dt else None
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def draft_application_essays(request):
+def regenerate_essay(request):
     """
-    POST /api/scholarships/draft_essays/
+    POST /api/scholarships/regenerate_essay/
+
+    Regenerates a single essay draft with a user-provided refinement instruction.
 
     Body:
         {
-            "prompts": [
-                {"id": "scholarscope-ta-0", "prompt": "Why do you deserve this?", "max_words": 200},
-                ...
-            ]
+            "prompt":      "Describe a time you showed leadership.",
+            "current_draft": "The current AI-written text...",
+            "instruction": "Make this more enthusiastic and mention my coding bootcamp.",
+            "max_words":   200
         }
 
     Returns:
         {
-            "drafts": [
-                {"id": "...", "draft": "...", "word_count": 143, "confidence": "high"},
-                ...
-            ],
-            "profile_completeness": 72   // % of profile fields filled — UI can warn user
+            "draft":      "Revised essay text...",
+            "word_count": 187,
+            "confidence": "high"
         }
+    """
+    prompt        = (request.data.get("prompt") or "").strip()
+    current_draft = (request.data.get("current_draft") or "").strip()
+    instruction   = (request.data.get("instruction") or "").strip()
+    max_words     = int(request.data.get("max_words") or 200)
+
+    if not prompt:
+        return Response({"error": "Essay prompt is required."}, status=400)
+    if not instruction:
+        return Response({"error": "Refinement instruction is required."}, status=400)
+
+    user    = request.user
+    profile = getattr(user, "profile", None)
+
+    def _get_profile_dict():
+        if not profile:
+            return {"first_name": user.first_name}
+        return {
+            "first_name":   user.first_name,
+            "last_name":    user.last_name,
+            "field_of_study": profile.field_of_study,
+            "institution":  profile.institution,
+            "bio":          profile.bio,
+            "career_goals": getattr(profile, "career_goals", ""),
+            "achievements": getattr(profile, "academic_achievements", ""),
+        }
+
+    llm = LLMEngine()
+
+    try:
+        result = async_to_sync(llm.refine_essay)(
+            profile_dict=_get_profile_dict(),
+            original_prompt=prompt,
+            current_draft=current_draft,
+            instruction=instruction,
+            max_words=max_words,
+        )
+        return Response(result, status=200)
+
+    except Exception as exc:
+        logger.exception(f"regenerate_essay: failed for user {user.id}: {exc}")
+        return Response({"error": "Regeneration failed. Please try again."}, status=500)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def start_essay_draft(request):
+    """
+    POST /api/scholarships/draft_essays/
+    
+    Returns immediately with a job_id.
+    Client polls /draft_essays/status/{job_id}/ for results.
+    This means the HTTP request never hangs waiting for Gemini.
     """
     prompts_list = request.data.get("prompts", [])
 
     if not prompts_list:
         return Response({"error": "No prompts provided."}, status=400)
-
     if len(prompts_list) > 10:
         return Response({"error": "Maximum 10 prompts per request."}, status=400)
 
-    # ── Build user profile from the authenticated user ──────────────────────
-    user = request.user
-
-    # Safely access the related profile — handle missing profile gracefully
+    user    = request.user
     profile = getattr(user, "profile", None)
-    def prof(attr, default=""):
-        return getattr(profile, attr, default) if profile else default
+    if not profile:
+        return Response({"error": "Profile not found."}, status=404)
 
-    user_profile = {
-        "first_name":      user.first_name,
-        "last_name":       user.last_name,
-        "field_of_study":  prof("field_of_study"),
-        "institution":     prof("institution"),
-        "year_of_study":   prof("year_of_study"),
-        "gpa":             prof("gpa"),
-        "country":         prof("country"),
-        "bio":             prof("bio"),
-        "achievements":    prof("achievements"),
-        "career_goals":    prof("career_goals"),
-        "extracurriculars":prof("extracurriculars"),
-        "financial_need":  prof("financial_need"),
-    }
+    # Build structured context here (fast, synchronous)
+    structured_context = _build_structured_context(user, profile)
 
-    # Compute profile completeness score so the frontend can warn sparse users
-    key_fields = ["bio", "achievements", "career_goals", "extracurriculars", "field_of_study", "institution"]
-    filled = sum(1 for f in key_fields if user_profile.get(f))
-    completeness_pct = round((filled / len(key_fields)) * 100)
+    # Generate a unique job ID
+    job_id = str(uuid.uuid4())
 
-    # Warn, but still proceed — let the LLM do its best with what's available
-    if completeness_pct < 30:
-        logger.warning(
-            f"User {user.id} has a very sparse profile ({completeness_pct}%) — essay quality will be low."
-        )
+    # Store initial state so polling endpoint has something to return
+    cache.set(
+        f"essay_job:{job_id}",
+        {"status": "pending", "drafts": [], "failed": []},
+        timeout=3600,
+    )
 
-    # ── Call LLM ────────────────────────────────────────────────────────────
-    llm = LLMEngine()
+    # Fire and forget — Celery handles the rest
+    draft_essays_batch.delay(
+        job_id=job_id,
+        profile_id=profile.id,
+        prompts_list=prompts_list,
+        structured_context=structured_context,
+    )
 
-    try:
-        drafted_responses = async_to_sync(llm.draft_essays)(user_profile, prompts_list)
-    except Exception as exc:
-        logger.exception(f"draft_application_essays: LLM failure for user {user.id}: {exc}")
-        return Response({"error": "Essay drafting failed. Please try again."}, status=500)
+    return Response({"job_id": job_id, "status": "pending"}, status=202)
 
-    # Surface any per-prompt failures without crashing the whole response
-    failures = [d for d in drafted_responses if d.get("confidence") == "failed"]
-    if failures:
-        logger.warning(f"{len(failures)} prompt(s) failed for user {user.id}: {failures}")
 
-    return Response({
-        "drafts":               drafted_responses,
-        "profile_completeness": completeness_pct,
-    }, status=200)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_essay_draft_status(request, job_id: str):
+    """
+    GET /api/scholarships/draft_essays/status/{job_id}/
+    
+    Returns current job state. Client polls every 2-3 seconds.
+    """
+    result = cache.get(f"essay_job:{job_id}")
+
+    if result is None:
+        return Response({"error": "Job not found or expired."}, status=404)
+
+    return Response(result, status=200)
+
+
+def _build_structured_context(user, profile) -> str:
+    return (
+        f"Name: {profile.full_name or user.get_full_name() or 'Not provided'}\n"
+        f"Field of Study: {profile.field_of_study or 'Not provided'}\n"
+        f"Institution: {profile.institution or 'Not provided'}\n"
+        f"Graduation Year: {profile.graduation_year or 'Not provided'}\n"
+        f"Country: {profile.country or 'Not provided'}\n"
+        f"Career Goals: {getattr(profile, 'career_goals', None) or 'Not provided'}\n"
+    )
+

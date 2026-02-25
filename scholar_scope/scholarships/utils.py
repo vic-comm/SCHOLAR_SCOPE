@@ -1,3 +1,4 @@
+from __future__ import annotations
 import random
 import string
 import hashlib
@@ -16,13 +17,11 @@ import dateparser
 import trafilatura
 from parsel import Selector
 from difflib import get_close_matches
-from __future__ import annotations
-
-import re
 from datetime import date
-from difflib import get_close_matches
-from typing import Optional
 
+logger = logging.getLogger(__name__)
+
+TOP_K_CHUNKS = 3
 import dateparser
 import trafilatura
 from parsel import Selector  
@@ -137,47 +136,6 @@ CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 def _rec_cache_key(user_id: int) -> str:
     return f"user_recommendations_{user_id}"
 
-# def get_cached_recommendations(user, top_n=20):
-#     from scholarships.models import Scholarship
-#     key = _rec_cache_key(user.id)
-#     cached = cache.get(key)
-
-#     if cached:
-#         return cached["results"]
-
-#     profile = getattr(user, "profile", None)
-#     if not profile or not profile.embedding:
-#         return _fallback_recommendations(user)
-
-#     user_vec = np.array(profile.embedding, dtype=float)
-
-#     scholarships = Scholarship.objects.filter(
-#         active=True, embedding__isnull=False
-#     ).exclude(
-#         id__in=_get_excluded_scholarships(user)
-#     )
-
-#     # Compute cosine similarity
-#     results = []
-#     for s in scholarships:
-#         try:
-#             sim = cosine_similarity([user_vec], [np.array(s.embedding, dtype=float)])[0][0]
-#             results.append((s, sim))
-#         except Exception as e:
-#             print(e)
-#             continue
-
-#     results = sorted(results, key=lambda x: x[1], reverse=True)[:top_n]
-#     scholarships = [s for s, _ in results]
-
-#     cache.set(
-#         key,
-#         {"results": scholarships, "cached_at": now().isoformat()},
-#         CACHE_TTL_SECONDS,
-#     )
-
-#     return scholarships
-
 def get_cached_recommendations(user, top_n=20):
     from scholarships.models import Scholarship
     key = _rec_cache_key(user.id)
@@ -210,7 +168,69 @@ def get_cached_recommendations(user, top_n=20):
 
     return results
 
-    
+CHUNK_WEIGHTS = {
+    "career_goals":    0.30,
+    "academic":        0.25,
+    "research":        0.15,
+    "leadership":      0.10,
+    "extracurriculars":0.10,
+    "bio":             0.10,
+}
+
+
+def get_multi_vector_recommendations(profile, top_n: int = 20) -> list:
+    """
+    Score scholarships against multiple profile chunk embeddings,
+    weighted by how much each dimension typically matters for matching.
+    Falls back to single-vector if chunks aren't ready.
+    """
+    from scholarships.models import ProfileChunk, Scholarship
+    chunks = list(
+        ProfileChunk.objects.filter(profile=profile)
+        .exclude(embedding__isnull=True)
+    )
+
+    if not chunks:
+        # Fall back to the existing single-vector approach
+        return _fallback_recommendations(profile.user)
+
+    excluded = _get_excluded_scholarships(profile.user)
+    scholarships = list(
+        Scholarship.objects.filter(active=True)
+        .exclude(id__in=excluded)
+        .exclude(embedding__isnull=True)
+    )
+
+    if not scholarships:
+        return []
+
+    # Score each scholarship against each chunk, weighted
+    scores: dict[int, float] = {s.id: 0.0 for s in scholarships}
+
+    for chunk in chunks:
+        weight = CHUNK_WEIGHTS.get(chunk.chunk_type, 0.05)
+        ranked = (
+            Scholarship.objects.filter(id__in=scores.keys())
+            .order_by(CosineDistance("embedding", chunk.embedding))
+            .values_list("id", flat=True)
+        )
+        total = len(ranked)
+        for rank, sid in enumerate(ranked):
+            # Convert rank to a 0-1 score (1 = most similar)
+            position_score = (total - rank) / total
+            scores[sid] += weight * position_score
+
+    # Sort by aggregate weighted score
+    sorted_ids = sorted(scores, key=scores.__getitem__, reverse=True)[:top_n]
+
+    # Preserve order from DB
+    id_order = {sid: i for i, sid in enumerate(sorted_ids)}
+    result = sorted(
+        [s for s in scholarships if s.id in id_order],
+        key=lambda s: id_order[s.id],
+    )
+    return result
+
 
 # --- Helpers ---
 def _get_excluded_scholarships(user):
@@ -825,65 +845,6 @@ class ScholarshipExtractor:
         return [name for name, kws in patterns.items() if any(k in t for k in kws)]    
     
     
-# def get_cached_recommendations(user, top_n: int = 20):
-#     key = _rec_cache_key(user.id)
-#     cached = cache.get(key)
-#     scholarships_updated_at = cache.get("scholarships_updated_at")
-
-#     # --- Strategy B: freshness check ---
-#     if cached and scholarships_updated_at:
-#         cached_at = cached.get("cached_at")
-#         if cached_at and cached_at < scholarships_updated_at:
-#             cached = None  # force recompute
-
-#     if cached:
-#         return cached["results"]
-
-#     # recompute
-#     profile = getattr(user, "profile", None)
-#     if not profile or not profile.embedding:
-#         return []
-
-#     user_vec = np.array(profile.embedding, dtype=float)
-#     qs = Scholarship.objects.filter(embedding__isnull=False, active=True)
-
-#     results = []
-#     for s in qs:
-#         sim = cosine_similarity([user_vec], [np.array(s.embedding, dtype=float)])[0][0]
-#         results.append({"id": s.id, "score": float(sim)})
-
-#     results = sorted(results, key=lambda r: r["score"], reverse=True)[:top_n]
-
-#     # save cache with timestamp
-#     cache.set(
-#         key,
-#         {"results": results, "cached_at": now().isoformat()},
-#         CACHE_TTL_SECONDS,
-#     )
-#     return results
-
-# def get_cached_recommendations(user, top_n=10):
-#     key = _rec_cache_key(user.id)
-#     cached = cache.get(key)
-#     if cached is not None:
-#         return cached
-
-#     profile = getattr(user, 'profile', None)
-#     if not profile or not profile.embedding:
-#         return []
-
-#     user_vec = np.array(profile.embedding, dtype=float)
-#     qs = Scholarship.objects.filter(embedding__isnull=False, active=True)
-
-#     results = []
-#     for s in qs:
-#         sim = cosine_similarity([user_vec], [np.array(s.embedding, dtype=float)])[0][0]
-#         results.append({"id": s.id, "score": float(sim)})
-
-#     results = sorted(results, key=lambda r: r['score'], reverse=True)[:top_n]
-#     cache.set(key, results, CACHE_TTL_SECONDS)
-#     return results
-
 # SiteConfig.objects.create(
 #     name="Scholarship Region",
 #     base_url="https://www.scholarshipregion.com",

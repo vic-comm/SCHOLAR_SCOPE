@@ -81,3 +81,8 @@ def _safe_m2m_ids(instance, field_name: str) -> list:
         return list(manager.values_list("id", flat=True))
     except Exception:
         return []
+    
+@receiver(post_save, sender=Profile)
+def sync_profile_chunks(sender, instance, **kwargs):
+    from scholarships.tasks import embed_profile_chunks
+    embed_profile_chunks.delay(instance.id)

@@ -107,9 +107,37 @@ class ApplicationStatusSerializer(serializers.ModelSerializer):
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
     completion_percentage = serializers.ReadOnlyField()
+    tags = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True
+    )
+    level = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True
+    )
     class Meta:
         model= Profile
         exclude = ['created_at', 'updated_at', 'user']
+
+    def update(self, instance, validated_data):
+        tags_data = validated_data.pop('tags', None)
+        level_data = validated_data.pop('level', None)
+
+        instance = super().update(instance, validated_data)
+
+        if tags_data is not None:
+            instance.tags.clear() 
+            for tag_name in tags_data:
+                clean_name = str(tag_name).strip().title() # Format nicely
+                tag_obj, _ = Tag.objects.get_or_create(name=clean_name)
+                instance.tags.add(tag_obj)
+
+        if level_data is not None:
+            instance.level.clear() 
+            for lvl_name in level_data:
+                clean_name = str(lvl_name).strip().title()
+                level_obj, _ = Level.objects.get_or_create(level=clean_name)
+                instance.level.add(level_obj)
+
+        return instance
 
 class LevelSerializer(serializers.ModelSerializer):
     class Meta:

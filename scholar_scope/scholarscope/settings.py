@@ -360,8 +360,15 @@ CACHES = {
 
 SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",
+#     "http://127.0.0.1:5173",
+# ]
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_ALL_ORIGINS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8000",
+    "chrome-extension://ojkebjiebipjbjfpakippnkklhdddbpf" # <-- Your exact extension ID
+]
