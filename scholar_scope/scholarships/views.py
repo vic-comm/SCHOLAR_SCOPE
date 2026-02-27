@@ -54,7 +54,6 @@ class CustomSignUpView(SignupView):
     
 class ScholarshipViewset(viewsets.ModelViewSet):
     serializer_class = ScholarshipSerializer
-    permission_classes = [IsAuthenticated]
     
     def get_permissions(self):
         if self.action in ['list', 'retrieve', 'details']:
@@ -63,6 +62,11 @@ class ScholarshipViewset(viewsets.ModelViewSet):
             return [IsAuthenticated()]
         else:
             return [IsAdminUser()]
+        
+    def get_authenticators(self):
+        if self.request and self.request.method == 'GET':
+            return []
+        return super().get_authenticators()    
     
     def get_queryset(self):
         queryset = Scholarship.objects.all()
@@ -296,7 +300,7 @@ class UserViewset(viewsets.ViewSet):
         recent_scholarships = Scholarship.objects.order_by('-created_at')[:5]
 
         stats = {
-            'total_applications': applied_scholarships.count(),
+            'total_applications': len(all_tracked_items),
             'total_bookmarks': bookmarked_scholarships.count(),
             'pending_applications': Application.objects.filter(user=user, status='pending').count(),
             'accepted_applications': Application.objects.filter(user=user, status='accepted').count(),
@@ -357,7 +361,7 @@ class ScrapeSubmissionViewset(viewsets.ModelViewSet):
         data = request.data
         link = data.get('url')
 
-        submission = ScrapeSubmission.objects.create(
+        submission, _ = ScrapeSubmission.objects.get_or_create(
             user=request.user,
             link=link,
             title=data.get('title'),
@@ -460,9 +464,7 @@ def extract_from_html(request):
         return Response({"error": "Failed to save to database."}, status=500)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Shared helper (also used by the spider)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_dates_inplace(data: dict) -> None:
     for key in ("end_date", "start_date"):
@@ -548,7 +550,14 @@ def start_essay_draft(request):
     This means the HTTP request never hangs waiting for Gemini.
     """
     prompts_list = request.data.get("prompts", [])
-
+    seen_prompts = set()
+    deduped = []
+    for item in prompts_list:
+        key = item.get('prompt', '').strip().lower()[:100]
+        if key and key not in seen_prompts:
+            seen_prompts.add(key)
+            deduped.append(item)
+    prompts_list = deduped[:10] 
     if not prompts_list:
         return Response({"error": "No prompts provided."}, status=400)
     if len(prompts_list) > 10:

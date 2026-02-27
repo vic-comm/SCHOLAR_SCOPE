@@ -1,13 +1,10 @@
 from django.db import models
 from django.urls import reverse
 from django.contrib.auth.models import AbstractUser
-from taggit.managers import TaggableManager
 from django.utils import timezone
 from django.conf import settings
-from scholarships.utils import random_string_generator
 from django.utils.text import slugify
 import hashlib
-from django.contrib.postgres.fields import ArrayField
 from pgvector.django import VectorField
 # Create your models here.
 class User(AbstractUser):
@@ -68,20 +65,7 @@ class Scholarship(models.Model):
     scraped_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
     is_recurring = models.BooleanField(default=False, help_text="True if this scholarship reopens annually.")
     last_renewed_at = models.DateTimeField(null=True, blank=True,help_text="The last time we detected a new cycle for this item.")
-    # VERIFICATION_CHOICES = [
-    #     ('PENDING', 'Pending Review'),
-    #     ('ACTIVE', 'Active'),
-    #     ('REJECTED', 'Rejected'),
-    # ]
-    # status = models.CharField(max_length=20, choices=VERIFICATION_CHOICES, default='ACTIVE') 
     status = models.CharField(max_length=20, default="active", choices=[("active", "Active"), ("expired", "Expired")])
-    # submitted_by = models.ForeignKey(
-    #     settings.AUTH_USER_MODEL, 
-    #     on_delete=models.SET_NULL, 
-    #     null=True, 
-    #     blank=True,
-    #     related_name='submitted_scholarships'
-    # )
     class Meta:
         unique_together = ('fingerprint', 'url')
 
@@ -165,7 +149,6 @@ class ScholarshipScrapeEvent(models.Model):
     error_message = models.CharField(blank=True, null=True)
     error_count = models.PositiveIntegerField(default=0)
     objects = ScholarshipScrapeEventManager()
-    # site_config = models.ForeignKey('SiteConfig', related_name='scrape_events', on_delete=models.SET_NULL)
 
     class Meta:
         ordering = ['-started_at']
@@ -284,6 +267,10 @@ class Profile(models.Model):
         blank=True,
         help_text="Clubs, sports, hobbies, side projects."
     )
+    relevant_coursework = models.TextField(
+        blank=True,
+        help_text="school work and what you learned from them"
+    )
     
     # Skills as structured data rather than buried in bio
     technical_skills = models.JSONField(
@@ -369,9 +356,6 @@ class ScrapeFailureLog(models.Model):
 
     def __str__(self):
         return f"Failed scrape {self.url} at {self.created_at}"
-
-    
-
 
 class SiteConfig(models.Model):
     name = models.CharField(max_length=100)

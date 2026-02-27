@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
     "axios": "^1.13.2",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
@@ -28,6 +29,7 @@
     "globals": "^16.5.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vite-plugin-static-copy": "^3.2.0"
   }
 }

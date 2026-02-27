@@ -9,12 +9,6 @@
     "default_title": "ScholarScope"
   },
 
-  "icons": {
-    "16":  "icons/icon16.png",
-    "48":  "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
-
   "permissions": [
     "activeTab",
     "contextMenus",
@@ -24,7 +18,8 @@
 
   "host_permissions": [
     "http://127.0.0.1:8000/*",
-    "http://localhost:8000/*"
+    "http://localhost:8000/*",
+    "<all_urls>"
   ],
 
   "background": {
@@ -34,9 +29,9 @@
 
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
       "js": ["src/content.js"],
-      "run_at": "document_idle"
+      "matches": ["<all_urls>"],
+      "all_frames": false
     }
   ]
 }

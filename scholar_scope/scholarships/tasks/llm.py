@@ -1,7 +1,7 @@
 import os
 from celery import shared_task
 from celery.utils.log import get_task_logger
-
+import ollama
 logger = get_task_logger(__name__)
 
 # Fixed — configure once at module level, reuse model
@@ -16,6 +16,7 @@ def _get_gemini_model():
         genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
         _gemini_model = genai.GenerativeModel(model_name="gemini-2.0-flash")
     return _gemini_model
+    
 
 @shared_task(
     bind=True,
@@ -26,6 +27,7 @@ def _get_gemini_model():
     queue="llm",                # Dedicated queue — separate from embedding tasks
     acks_late=True,             # Only ack after completion, not on receipt
     reject_on_worker_lost=True, # Re-queue if worker dies mid-task
+    time_limit=60
 )
 def draft_single_essay(
     self,
@@ -78,20 +80,30 @@ def draft_single_essay(
             f"Scholarship Question:\n{question}\n\n"
             f"Write a response of NO MORE THAN {max_words} words."
         )
+        if os.getenv('USE_OLLAMA'):
+            response = ollama.generate(
+                model="gpt-oss:120b-cloud",
+                prompt=f"{SYSTEM_PROMPT}\n\n{user_prompt}",
+                options={
+                    "temperature": 0.75,
+                    "num_predict": max_words * 6,
+                }
+            )
+            draft_text = response['response'].strip()
+        else:
+            # ── Gemini call (sync in Celery worker) ───────────────────────────
+            model = _get_gemini_model()
+            response = model.generate_content(
+                contents=f"{SYSTEM_PROMPT}\n\n{user_prompt}",
+                generation_config={
+                    "temperature": 0.75,
+                    "max_output_tokens": max_words * 6,
+                    "top_p": 0.9,
+                }
+            )
 
-        # ── Gemini call (sync in Celery worker) ───────────────────────────
-        model = _get_gemini_model()
-        response = model.generate_content(
-            contents=user_prompt,
-            generation_config={
-                "temperature": 0.75,
-                "max_output_tokens": max_words * 6,
-                "top_p": 0.9,
-            }
-        )
-
-        draft_text = response.text.strip()
-
+            draft_text = response.text.strip()
+        
         # ── Confidence based on how many chunks the user filled ───────────
         filled_chunks = ProfileChunk.objects.filter(
             profile=profile
