@@ -217,7 +217,7 @@ class QualityCheck:
     @classmethod
     def _is_valid_reward(cls, text: str) -> Dict[str, Any]:
         t = text.strip()
-        t_lower = t.lower()
+        t_lower = t.lower() 
         
         # Check for garbage
         is_garbage, garbage_reason = cls._is_generic_garbage(text)

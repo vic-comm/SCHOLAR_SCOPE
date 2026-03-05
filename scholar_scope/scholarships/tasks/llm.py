@@ -2,22 +2,12 @@ import os
 from celery import shared_task
 from celery.utils.log import get_task_logger
 import ollama
+from scholarships.utils import generate_text
+from asgiref.sync import async_to_sync
 logger = get_task_logger(__name__)
 
 # Fixed — configure once at module level, reuse model
-import google.generativeai as genai
 import os
-
-_gemini_model = None
-
-def _get_gemini_model():
-    global _gemini_model
-    if _gemini_model is None:
-        genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-        _gemini_model = genai.GenerativeModel(model_name="gemini-2.0-flash")
-    return _gemini_model
-    
-
 @shared_task(
     bind=True,
     name="scholarships.draft_single_essay",
@@ -71,6 +61,8 @@ def draft_single_essay(
             "3. Be specific and concrete — vague answers fail.\n"
             "4. Respect the word limit exactly.\n"
             "5. Return ONLY the essay text, no labels or markdown."
+             "6. If scholarship context is provided, tailor the essay to what "
+            "   that scholarship values and who it targets."
         )
 
         user_prompt = (
@@ -91,16 +83,7 @@ def draft_single_essay(
             )
             draft_text = response['response'].strip()
         else:
-            # ── Gemini call (sync in Celery worker) ───────────────────────────
-            model = _get_gemini_model()
-            response = model.generate_content(
-                contents=f"{SYSTEM_PROMPT}\n\n{user_prompt}",
-                generation_config={
-                    "temperature": 0.75,
-                    "max_output_tokens": max_words * 6,
-                    "top_p": 0.9,
-                }
-            )
+            response = async_to_sync(generate_text)(user_prompt, response_format="text", max_words=max_words)
 
             draft_text = response.text.strip()
         
@@ -126,12 +109,12 @@ def draft_single_essay(
         error_msg = str(exc)
 
         # Rate limit from Google — retry with exponential backoff
-        if "429" in error_msg or "ResourceExhausted" in error_msg:
+        if "All LLM providers failed" in error_msg or "ResourceExhausted" in error_msg:
+            logger.warning(f"[Celery Retry] All LLMs down or exhausted. Retrying task {item_id} in {2 ** self.request.retries * 15}s...")
             raise self.retry(
                 exc=exc,
                 countdown=2 ** self.request.retries * 15,  # 15s, 30s, 60s
             )
-
         logger.exception(f"[Essay Task] Failed for prompt {item_id}: {exc}")
         return {"id": item_id, "draft": "", "word_count": 0, "confidence": "failed"}
 

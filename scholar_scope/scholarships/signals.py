@@ -2,7 +2,6 @@ from django.db.models.signals import post_save
 from .models import User, Profile
 from django.dispatch import receiver
 from scholarships.tasks import generate_profile_embedding, generate_scholarship_embedding
-from .utils import get_text_embedding
 from scholarships.models import Scholarship
 from django.utils.timezone import now
 from django.db import models

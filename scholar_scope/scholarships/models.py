@@ -293,23 +293,50 @@ class Profile(models.Model):
         null=True, blank=True,
         default=4.0
     )
+
     @property
     def completion_percentage(self):
-        fields_to_check = [
-            'bio', 'field_of_study', 'country', 'city', 'full_name', 'tags',
-            'institution', 'level', 'graduation_year',
-            'preferred_scholarship_types', 'preferred_countries'
+        standard_fields = [
+            'full_name', 'date_of_birth', 'country', 'city', 
+            'field_of_study', 'institution', 'graduation_year', 'gpa',
+            'preferred_countries', 'preferred_scholarship_types', 'bio',
+            
+            'leadership_experience', 'academic_achievements', 
+            'financial_need_statement', 'career_goals', 'community_impact', 
+            'challenges_overcome', 'research_experience', 'extracurriculars', 
+            'relevant_coursework'
         ]
         
-        filled_count = 0
-        for field in fields_to_check:
-            value = getattr(self, field, None)
-            if value and str(value).strip(): 
-                filled_count += 1
+        m2m_fields = ['level', 'tags']
         
-        if not fields_to_check: return 0
-        return int((filled_count / len(fields_to_check)) * 100)
-    
+        json_fields = ['technical_skills', 'languages_spoken']
+        
+        total_fields = len(standard_fields) + len(m2m_fields) + len(json_fields)
+        filled_count = 0
+        
+        # --- Check Standard Fields ---
+        for field in standard_fields:
+            value = getattr(self, field, None)
+            if value is not None and str(value).strip() and str(value).strip().lower() not in ['null', 'undefined']: 
+                filled_count += 1
+                
+        # --- Check ManyToMany Fields ---
+        for field in m2m_fields:
+            manager = getattr(self, field, None)
+            if manager is not None and manager.exists():
+                filled_count += 1
+                
+        # --- Check JSON Fields ---
+        for field in json_fields:
+            value = getattr(self, field, None)
+            if value and isinstance(value, list) and len(value) > 0:
+                filled_count += 1
+
+        if total_fields == 0: 
+            return 0
+            
+        return int((filled_count / total_fields) * 100)  
+  
     def __str__(self):
         return f"{self.user.username}'s Profile"
 

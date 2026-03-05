@@ -4,17 +4,72 @@ import { useNavigate } from "react-router-dom";
 import Navbar from '../components/Navbar';
 import ExtensionPrompt from '../components/ExtensionPrompt';
 import ProfileCompletion from "../components/ProfileCompletion";
+import { Trash2 } from 'lucide-react';
 
 const Dashboard = () => {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [recentApps, setRecentApps] = useState([]);
   const navigate = useNavigate();
+
+  const handleStatusChange = async (id, isScrape, newStatus) => {
+    // 1. Optimistically update the UI
+    setRecentApps(prevApps => 
+      prevApps.map(app => 
+        app.id === id && app.is_scrape === isScrape 
+          ? { ...app, status: newStatus } 
+          : app
+      )
+    );
+
+    // 2. Make the API call to Django
+    try {
+      const endpoint = isScrape 
+        ? `/submissions/${id}/update_status/`     
+        : `/applications/${id}/update_status/`; 
+        
+      await api.patch(endpoint, { status: newStatus });
+    } catch (error) {
+      console.error("Failed to update status", error);
+      // Optional: Revert state here if API fails
+    }
+  };
+
+  const handleDelete = async (id, isScrape) => {
+    if (!window.confirm("Are you sure you want to remove this from your dashboard?")) return;
+
+    // 1. Optimistically remove from UI
+    setRecentApps(prevApps => 
+      prevApps.filter(app => !(app.id === id && app.is_scrape === isScrape))
+    );
+
+    setDashboard(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        stats: {
+          ...prev.stats,
+          total_applications: Math.max(0, (prev.stats.total_applications || 0) - 1)
+        }
+      };
+    });
+
+    try {
+      const endpoint = isScrape 
+        ? `/submissions/${id}/`     
+        : `/applications/${id}/`; 
+      await api.delete(endpoint);
+    } catch (error) {
+      console.error("Failed to delete application", error);
+    }
+  };
 
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
         const res = await api.get("users/user_dashboard/");
         setDashboard(res.data);
+        setRecentApps(res.data.recent_applications || []);
       } catch (err) {
         console.error("Error fetching dashboard:", err);
       } finally {
@@ -23,6 +78,7 @@ const Dashboard = () => {
     };
     fetchDashboard();
   }, []);
+
 
   async function handleRemoveBookmark(scholarshipId) {
     const previousDashboard = { ...dashboard };
@@ -57,7 +113,6 @@ const Dashboard = () => {
   if (!dashboard) return <div className="p-6 text-center text-gray-500">No data available.</div>;
 
   const stats = dashboard.stats || {};
-  const recentApps = dashboard.recent_applications || [];
   const bookmarks = dashboard.bookmarked_scholarships || [];
   const recommended = dashboard.recommended_scholarships || [];
   const deadlines = dashboard.upcoming_deadlines || [];
@@ -93,7 +148,8 @@ const Dashboard = () => {
         </div>
 
         {/* Profile Completion */}
-        <ProfileCompletion percentage={dashboard.stats.profile_completion} />
+        <ProfileCompletion percentage={stats.profile_completion || 0} />
+
         {/* Applications */}
         <Section title="My Applications">
           {recentApps.length > 0 ? (
@@ -118,23 +174,47 @@ const Dashboard = () => {
                     </p>
                   </div>
                   
+                  {/* --- UPDATED ACTION ROW --- */}
                   <div className="flex items-center gap-3">
-                    <Badge status={app.status} />
+                    
+                    {/* Status Dropdown */}
+                    <select
+                      value={app.status || 'pending'}
+                      onChange={(e) => handleStatusChange(app.id, app.is_scrape, e.target.value)}
+                      className="text-sm font-medium border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="submitted">Submitted</option>
+                      <option value="accepted">Accepted</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+
+                    {/* View/Visit Buttons */}
                     {app.is_scrape ? (
                       <button
                           onClick={() => app.scholarship?.link && window.open(app.scholarship.link, '_blank')}
-                          className="px-4 py-2 text-sm border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900"
+                          className="px-4 py-2 text-sm border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 transition-colors"
                       >
                           Visit Site
                       </button>
                     ) : (
                       <button
                           onClick={() => navigate(`/scholarships/${app.scholarship?.id}`)}
-                          className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 shadow-sm"
+                          className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 shadow-sm transition-colors"
                       >
                           View Details
                       </button>
                     )}
+
+                    {/* Delete Button */}
+                    <button
+                      onClick={() => handleDelete(app.id, app.is_scrape)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      title="Delete Application"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
                   </div>
                 </div>
               ))}

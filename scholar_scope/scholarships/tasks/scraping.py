@@ -10,32 +10,10 @@ from asgiref.sync import async_to_sync
 import dateparser
 from datetime import date
 from celery.utils.log import get_task_logger
+import os
 
 logger = get_task_logger(__name__)
 
-# Fixed — configure once at module level, reuse model
-import google.generativeai as genai
-import os
-
-def should_abort_request(request):
-    """
-    Blocks images, fonts, and ad domains to speed up scraping.
-    """
-    # 1. Block Resource Types
-    if request.resource_type in ["image", "media", "font", "stylesheet"]:
-        return True
-        
-    # 2. Block Ad Domains
-    url = request.url.lower()
-    ad_domains = [
-        "googleads", "doubleclick", "googlesyndication", "facebook", 
-        "twitter", "linkedin", "analytics", "tracking", "temu", 
-        "quantserve", "criteo", "outbrain", "taboola"
-    ]
-    if any(domain in url for domain in ad_domains):
-        return True
-        
-    return False
 
 def _run_spider_process(site_config_id, scrape_event_id):
     try:
@@ -43,50 +21,18 @@ def _run_spider_process(site_config_id, scrape_event_id):
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'scholarscope.settings')
         django.setup()
 
+        # 1. Import Scrapy's settings manager
+        from scrapy.utils.project import get_project_settings
+        from scrapy.crawler import CrawlerProcess
         from scholarscope_scrapers.scholarscope_scrapers.spiders.scholarships_spider import ScholarshipBatchSpider
-        settings = {
-            # Pipeline Path
-            "ITEM_PIPELINES": {
-                'scholarscope_scrapers.scholarscope_scrapers.pipelines.RenewalAndDuplicatePipeline': 200,
-                'scholarscope_scrapers.scholarscope_scrapers.pipelines.ScholarshipPipeline': 300,
-            },
-            "PLAYWRIGHT_ABORT_REQUEST": should_abort_request,
-            # Playwright Handlers
-            "DOWNLOAD_HANDLERS": {
-                "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-                "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-            },
-            
-            "PLAYWRIGHT_BROWSER_TYPE": "firefox",
-            
-            "PLAYWRIGHT_LAUNCH_OPTIONS": {
-                "headless": True,
-                "timeout": 60000, # 60s timeout
-            },
-            
-            "PLAYWRIGHT_CONTEXT_ARGS": {
-                "ignore_https_errors": True, # Ignore SSL/TLS certificate errors
-                "java_script_enabled": True,
-                "bypass_csp": True,
-                
-                "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/115.0",
-                
-                "viewport": {"width": 1280, "height": 720},
-                "service_workers": "block",
-            },
 
-            # ✅ Scrapy Config
-            "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
-            "LOG_LEVEL": "DEBUG",
-            "ROBOTSTXT_OBEY": False,
-            "COOKIES_ENABLED": True,
-            "HTTPERROR_ALLOWED_CODES": [403, 404, 500],
-            
-            "USER_AGENT": None, 
-        }
+        # 2. Grab the global settings and force the async reactor BEFORE boot
+        settings = get_project_settings()
+        settings.set("TWISTED_REACTOR", "twisted.internet.asyncioreactor.AsyncioSelectorReactor")
 
-        # 5. RUN CRAWLER
-        process = CrawlerProcess(settings=settings)
+        # 3. Pass the settings into the CrawlerProcess
+        process = CrawlerProcess(settings)
+        
         process.crawl(
             ScholarshipBatchSpider, 
             site_config_id=site_config_id, 
@@ -96,8 +42,7 @@ def _run_spider_process(site_config_id, scrape_event_id):
 
     except Exception as e:
         print(f"Spider Process Failed: {e}")
-        sys.exit(1) # Exit with error code so Celery knows it failed
-
+        sys.exit(1)
 
 @shared_task(bind=True)
 def scrape_site(self, site_config_id, scrape_event_id=None):

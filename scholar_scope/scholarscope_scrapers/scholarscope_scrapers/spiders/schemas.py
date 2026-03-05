@@ -13,7 +13,7 @@ ALLOWED_TAGS = {
 
 class ScholarshipScrapedSchema(BaseModel):
     title: str = Field(..., min_length=5)
-    link: HttpUrl  # Changed from AnyHttpUrl to HttpUrl (Standard in V2)
+    link: HttpUrl  
     scraped_at: datetime
 
     description: Optional[str] = None

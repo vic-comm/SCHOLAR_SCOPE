@@ -8,7 +8,6 @@ from django.core.cache import cache
 import numpy as np
 from django.db.models import Count, Q
 from django.utils.timezone import now
-from sklearn.metrics.pairwise import cosine_similarity
 from pgvector.django import CosineDistance
 from typing import Optional, List
 import re
@@ -18,7 +17,10 @@ import trafilatura
 from parsel import Selector
 from difflib import get_close_matches
 from datetime import date
-
+import google.generativeai as genai
+from openai import AsyncOpenAI
+import os
+import json
 logger = logging.getLogger(__name__)
 
 TOP_K_CHUNKS = 3
@@ -129,7 +131,82 @@ def send_user_notification(user, subject: str, body: str):
         except Exception:
             pass
 
+_openrouter_client = None
+_groq_client = None
+_gemini_configured = False
 
+def _ensure_clients_configured():
+    """Lazily initialize clients only when needed."""
+    global _gemini_configured, _openrouter_client, _groq_client
+    
+    if not _gemini_configured:
+        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+        _gemini_configured = True
+
+    if _openrouter_client is None:
+        _openrouter_client = AsyncOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=os.getenv("OPENROUTER_API_KEY") or "dummy_key",
+        )
+
+    if _groq_client is None:
+        _groq_client = AsyncOpenAI(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=os.getenv("GROQ_API_KEY") or "dummy_key",
+        )
+
+async def generate_text(prompt, response_format="text", max_words=None):
+    """
+    Infrastructure layer: Attempts Gemini -> OpenRouter -> Groq.
+    Returns parsed JSON dict if response_format="json", else string.
+    """
+    _ensure_clients_configured()
+    providers = ["gemini", "openrouter", "groq"]
+    
+    for provider in providers:
+        try:
+            if provider == "gemini":
+                model_name = "gemini-2.0-flash"
+                kwargs = {}
+                
+                if response_format == "json":
+                    model = genai.GenerativeModel(model_name, generation_config={"response_mime_type": "application/json"})
+                else:
+                    model = genai.GenerativeModel(model_name)
+                    if max_words:
+                        kwargs["generation_config"] = {"max_output_tokens": max_words * 6, "temperature": 0.75}
+                
+                response = await model.generate_content_async(prompt, **kwargs)
+                return json.loads(response.text) if response_format == "json" else response.text.strip()
+
+            elif provider == "openrouter":
+                kwargs = {"model": "openrouter/auto", "messages": [{"role": "user", "content": prompt}]}
+                if response_format == "json":
+                    kwargs["response_format"] = {"type": "json_object"}
+                if max_words:
+                    kwargs["max_tokens"] = max_words * 6
+                    
+                response = await _openrouter_client.chat.completions.create(**kwargs)
+                result = response.choices[0].message.content
+                return json.loads(result) if response_format == "json" else result.strip()
+
+            elif provider == "groq":
+                kwargs = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}]}
+                if response_format == "json":
+                    kwargs["response_format"] = {"type": "json_object"}
+                if max_words:
+                    kwargs["max_tokens"] = max_words * 6
+                    
+                response = await _groq_client.chat.completions.create(**kwargs)
+                result = response.choices[0].message.content
+                return json.loads(result) if response_format == "json" else result.strip()
+
+        except Exception as e:
+            logger.warning(f"[LLM Fallback] {provider.upper()} failed: {str(e)}")
+            continue
+
+    logger.error("Critical: All LLM providers failed.")
+    return {} if response_format == "json" else ""
 
 CACHE_TTL_SECONDS = 7 * 24 * 60 * 60   
 
@@ -301,8 +378,47 @@ def _try_parse_date(raw: str) -> Optional[date]:
     except Exception:
         return None
 
+_NAV_PHRASES = frozenset([
+    "postgraduate scholarships", "undergraduate scholarships",
+    "masters scholarships", "phd scholarships", "high school scholarships",
+    "scholarships by level", "scholarships by country", "scholarships by field",
+    "competitions", "fellowships", "training", "internships",
+    "recent posts", "categories", "archives", "related posts",
+    "read more", "learn more", "click here", "apply now",
+    "home", "about", "contact", "privacy policy", "terms",
+    "menu", "search", "navigation", "skip to content",
+    "share", "tweet", "facebook", "print", "email",
+    "all scholarships", "browse scholarships", "find scholarships",
+    "scholarship search", "sign in", "my account", "dashboard",
+    "back to top", "continue reading", "load more",
+])
 
-# Core class
+# Heading keywords that identify the right content sections
+_ELIGIBILITY_HEADINGS = [
+    "eligibility", "who can apply", "who should apply",
+    "criteria", "qualifications", "requirements to apply",
+    "eligible applicants", "who is eligible",
+]
+_REQUIREMENTS_HEADINGS = [
+    "requirements", "documents required", "required documents",
+    "what you need", "application documents", "documents needed",
+    "how to apply", "application requirements", "what to submit",
+]
+
+
+def _is_navigation_item(text: str) -> bool:
+    """Returns True if this text looks like a navigation/sidebar item."""
+    t = _normalize(text)
+    if t in _NAV_PHRASES:
+        return True
+    # Ends with "scholarships" alone (sidebar category links)
+    if re.match(r"^[a-z\s]+ scholarships?$", t):
+        return True
+    # Very short items with no sentence structure are usually nav
+    if len(t.split()) < 3 and not any(c in t for c in [":", "("]):
+        return True
+    return False
+
 
 class ScholarshipExtractor:
     def __init__(
@@ -314,18 +430,18 @@ class ScholarshipExtractor:
     ):
         if scrapy_response is not None:
             self._response = scrapy_response
-            self._sel = scrapy_response          # Scrapy Response IS a Selector
+            self._sel = scrapy_response
             self.url = scrapy_response.url
             self.raw_html = scrapy_response.text
         elif raw_html is not None:
             self.raw_html = raw_html
-            self._sel = Selector(text=raw_html)  # parsel Selector
+            self._sel = Selector(text=raw_html)
             self._response = None
             self.url = url or ""
         else:
             raise ValueError("Provide either raw_html= or scrapy_response=")
 
-        self._clean_text_cache: Optional[str] = None  # lazy
+        self._clean_text_cache: Optional[str] = None
 
     # ── low-level helpers ─────────────────────────────────────────────────────
 
@@ -334,11 +450,15 @@ class ScholarshipExtractor:
 
     @property
     def clean_text(self) -> str:
-        """Cached, noise-stripped body text (trafilatura → CSS fallback)."""
         if self._clean_text_cache is not None:
             return self._clean_text_cache
         try:
-            text = trafilatura.extract(self.raw_html)
+            text = trafilatura.extract(
+                self.raw_html,
+                include_comments=False,
+                include_tables=True,
+                no_fallback=False,
+            )
             if text and len(text) > 200:
                 self._clean_text_cache = text
                 return text
@@ -347,7 +467,8 @@ class ScholarshipExtractor:
 
         content_selectors = [
             "article", ".entry-content", ".post-content",
-            ".article-content", "main", "#content", "div[class*='content']",
+            ".article-content", "main", "#content",
+            "div[class*='content']", "div[class*='article']",
         ]
         for sel in content_selectors:
             text = self._extract_text_excluding_noise(self.css(sel))
@@ -366,12 +487,17 @@ class ScholarshipExtractor:
                 [not(ancestor::script)]
                 [not(ancestor::style)]
                 [not(ancestor::nav)]
+                [not(ancestor::header)]
                 [not(ancestor::footer)]
                 [not(ancestor::aside)]
                 [not(ancestor::div[contains(@class,'related')])]
                 [not(ancestor::div[contains(@class,'sidebar')])]
                 [not(ancestor::div[contains(@class,'widget')])]
                 [not(ancestor::div[contains(@class,'comments')])]
+                [not(ancestor::div[contains(@class,'menu')])]
+                [not(ancestor::div[contains(@class,'nav')])]
+                [not(ancestor::ul[contains(@class,'nav')])]
+                [not(ancestor::ul[contains(@class,'menu')])]
             """
             texts = selector.xpath(clean_xpath).getall()
             joined = " ".join(t.strip() for t in texts if t.strip())
@@ -383,10 +509,6 @@ class ScholarshipExtractor:
                 return ""
 
     def _section_text(self, css_selector: Optional[str]) -> Optional[str]:
-        """
-        Extract combined visible text from the first element matching a CSS
-        selector.  Handles ::text / ::attr suffixes gracefully.
-        """
         if not css_selector:
             return None
         clean = re.sub(r"::(text|attr\([^)]+\))", "", css_selector).strip()
@@ -403,6 +525,91 @@ class ScholarshipExtractor:
         except Exception:
             return None
 
+    # ── Semantic section finder ───────────────────────────────────────────────
+
+    def _find_semantic_section(self, heading_keywords: list[str]) -> Optional[str]:
+        """
+        Find the content section whose heading matches one of the keywords.
+        Returns the combined text of list items / paragraphs inside that section,
+        guaranteed NOT to be navigation content.
+
+        Strategy:
+        1. Find a heading (h2/h3/h4/dt/strong/th) whose text matches a keyword.
+        2. Walk forward siblings to collect li/p/dd text until the next heading.
+        3. Return None if nothing substantive is found.
+        """
+        # All headings on the page
+        heading_sel = "h1, h2, h3, h4, h5, dt, th, strong, [class*='heading'], [class*='title']"
+
+        for heading_el in self.css(heading_sel):
+            heading_text = _normalize(heading_el.xpath("string(.)").get() or "")
+            if not any(kw in heading_text for kw in heading_keywords):
+                continue
+
+            # Found a matching heading — collect following content
+            # Try parent container first
+            parent_html = heading_el.xpath("..").get() or ""
+            if not parent_html:
+                continue
+
+            parent_sel = Selector(text=parent_html)
+
+            # Collect li items from the parent
+            items = []
+            for li in parent_sel.css("li"):
+                text = li.xpath("string(.)").get(default="").strip()
+                if text and not _is_navigation_item(text):
+                    items.append(text)
+
+            if items:
+                return "\n".join(items)
+
+            # Fallback: collect paragraphs
+            for p in parent_sel.css("p"):
+                text = p.xpath("string(.)").get(default="").strip()
+                if len(text) > 20 and not _is_navigation_item(text):
+                    items.append(text)
+
+            if items:
+                return "\n".join(items)
+
+        return None
+
+    def _find_content_list(self, heading_keywords: list[str], validator) -> list[str]:
+        """
+        Find list items under a semantic heading and validate each with `validator`.
+        Falls back to searching clean_text with regex.
+        Does NOT fall back to bare `ul li` (navigation poison risk).
+        """
+        results = []
+
+        section_text = self._find_semantic_section(heading_keywords)
+        if section_text:
+            for line in re.split(r"[\n;•►→➤]", section_text):
+                line = _clean_bullet(line).strip()
+                if validator(line) and not _is_navigation_item(line):
+                    results.append(line)
+            if results:
+                return results
+
+        # Try class-targeted selectors only (NOT bare ul li)
+        targeted_selectors = [
+            f"[class*='{kw.split()[0]}'] li"
+            for kw in heading_keywords
+            if kw.split()[0] not in ("who", "what", "how")
+        ]
+        for sel in targeted_selectors:
+            for el in self.css(sel):
+                text = el.xpath("string(.)").get(default="").strip()
+                if validator(text) and not _is_navigation_item(text):
+                    results.append(text)
+                    if len(results) >= 10:
+                        break
+            if results:
+                return results
+
+        return results
+
     # ─────────────────────────────────────────────────────────────────────────
     # 1. TITLE
     # ─────────────────────────────────────────────────────────────────────────
@@ -410,14 +617,16 @@ class ScholarshipExtractor:
     def extract_title(self, css_selector: Optional[str] = None) -> str:
         if css_selector:
             text = self._section_text(css_selector)
-            if text:
-                return text[:255]
+            if text and len(text.strip()) > 5:
+                return text.strip()[:255]
 
-        for sel in ["h1", ".entry-title", ".post-title", ".scholarship-title", "[class*='title']"]:
+        for sel in ["h1", ".entry-title", ".post-title", ".scholarship-title",
+                    "[class*='title']", "[class*='heading']"]:
             title = self.css(f"{sel}::text").get()
             if title and len(title.strip()) > 5:
                 title = title.split("|")[0].split(" - ")[0].strip()
-                return title[:255]
+                if not _is_navigation_item(title):
+                    return title[:255]
 
         page_title = self.css("title::text").get()
         if page_title:
@@ -432,7 +641,7 @@ class ScholarshipExtractor:
     def extract_description(self, css_selector: Optional[str] = None) -> str:
         if css_selector:
             text = self._section_text(css_selector)
-            if text:
+            if text and len(text) > 50:
                 return text
 
         parts: list[str] = []
@@ -441,19 +650,28 @@ class ScholarshipExtractor:
         if meta and len(meta) > 50:
             parts.append(meta.strip())
 
-        skip = {"home", "menu", "navigation", "copyright", "privacy", "cookie"}
-        for p in self.css("p")[:5]:
+        skip = {"home", "menu", "navigation", "copyright", "privacy", "cookie",
+                "subscribe", "newsletter", "advertisement"}
+        for p in self.css("article p, .entry-content p, .post-content p, main p")[:8]:
             text = p.xpath("string(.)").get(default="").strip()
-            if len(text) > 50 and not any(w in text.lower() for w in skip):
+            if len(text) > 60 and not any(w in text.lower() for w in skip):
                 parts.append(text)
                 if len(parts) >= 3:
                     break
 
         if not parts:
-            for sel in [".entry-content", ".post-content", ".article-content", "article"]:
+            for p in self.css("p")[:6]:
+                text = p.xpath("string(.)").get(default="").strip()
+                if len(text) > 60 and not any(w in text.lower() for w in skip):
+                    parts.append(text)
+                    if len(parts) >= 2:
+                        break
+
+        if not parts:
+            for sel in [".entry-content", ".post-content", ".article-content", "article", "main"]:
                 text = self.css(sel).xpath("string(.)").get()
                 if text and len(text.strip()) > 100:
-                    parts.append(text.strip()[:500])
+                    parts.append(text.strip()[:600])
                     break
 
         if parts:
@@ -472,9 +690,13 @@ class ScholarshipExtractor:
 
         page_text = self.clean_text
 
-        naira = [r"₦\s*([0-9,]+(?:\.[0-9]{2})?)", r"N\s*([0-9,]+(?:\.[0-9]{2})?)", r"([0-9,]+(?:\.[0-9]{2})?)\s*naira"]
-        usd   = [r"\$\s*([0-9,]+(?:\.[0-9]{2})?)", r"([0-9,]+(?:\.[0-9]{2})?)\s*(?:USD|dollars?)"]
-        gen   = [r"worth\s*(?:of\s*)?₦?\$?\s*([0-9,]+)", r"value\s*(?:of\s*)?₦?\$?\s*([0-9,]+)", r"amount\s*(?:of\s*)?₦?\$?\s*([0-9,]+)"]
+        naira  = [r"₦\s*([0-9,]+(?:\.[0-9]{2})?)", r"N\s*([0-9,]+(?:\.[0-9]{2})?)",
+                  r"([0-9,]+(?:\.[0-9]{2})?)\s*naira"]
+        usd    = [r"\$\s*([0-9,]+(?:\.[0-9]{2})?)",
+                  r"([0-9,]+(?:\.[0-9]{2})?)\s*(?:USD|dollars?)"]
+        gen    = [r"worth\s*(?:of\s*)?₦?\$?\s*([0-9,]+)",
+                  r"value\s*(?:of\s*)?₦?\$?\s*([0-9,]+)",
+                  r"amount\s*(?:of\s*)?₦?\$?\s*([0-9,]+)"]
 
         for group, prefix in [(naira, "₦"), (usd, "$"), (gen, "")]:
             for pattern in group:
@@ -488,7 +710,8 @@ class ScholarshipExtractor:
                     except (ValueError, AttributeError):
                         continue
 
-        for kw in ["tuition", "allowance", "stipend", "support", "funding", "full scholarship"]:
+        for kw in ["tuition", "allowance", "stipend", "support", "funding",
+                   "full scholarship", "fully funded"]:
             if kw in page_text.lower():
                 return f"Educational {kw}"
 
@@ -503,8 +726,6 @@ class ScholarshipExtractor:
         date_type: str = "end",
         css_selector: Optional[str] = None,
     ) -> Optional[date]:
-        """date_type: 'end' (deadline) or 'start'."""
-        # Try CSS selector first
         if css_selector:
             raw = self._section_text(css_selector)
             if raw:
@@ -512,7 +733,6 @@ class ScholarshipExtractor:
                 if parsed:
                     return parsed
 
-        # Regex over clean text
         return self._date_from_text(self.clean_text, date_type)
 
     def _date_from_text(self, text: str, date_type: str) -> Optional[date]:
@@ -524,7 +744,6 @@ class ScholarshipExtractor:
                 r"begins?[:\s]*([^.!?\n]+)",
                 r"from[:\s]*([^.!?\n]+?)(?:\s*to\s*|\s*-\s*)",
                 r"available\s*from[:\s]*([^.!?\n]+)",
-                r"registration\s*(?:opens?|starts?)[:\s]*([^.!?\n]+)",
             ]
         else:
             patterns = [
@@ -532,10 +751,10 @@ class ScholarshipExtractor:
                 r"due date[:\s]*([^.!?\n]+)",
                 r"closing date[:\s]*([^.!?\n]+)",
                 r"last date[:\s]*([^.!?\n]+)",
-                r"application closes[:\s]*([^.!?\n]+)",
+                r"application closes?[:\s]*([^.!?\n]+)",
                 r"expires?[:\s]*([^.!?\n]+)",
-                r"until[:\s]*([^.!?\n]+)",
-                r"by[:\s]*([^.!?\n]+)",
+                r"close[sd]?\s*on[:\s]*([^.!?\n]+)",
+                r"submit\s*by[:\s]*([^.!?\n]+)",
             ]
 
         for pattern in patterns:
@@ -556,59 +775,56 @@ class ScholarshipExtractor:
     ) -> list[str]:
         results: list[str] = []
 
-        # From targeted selector
+        # ── A. Targeted CSS selector ──────────────────────────────────────────
         if css_selector:
             raw = self._section_text(css_selector)
             if raw:
                 for header in ["Eligibility:", "Who can apply:", "Criteria:"]:
                     raw = raw.replace(header, "")
                 for part in re.split(r"[\n;•►→➤]", raw):
-                    if self._is_eligibility(part.strip()):
-                        results.append(part.strip())
+                    part = _clean_bullet(part).strip()
+                    if self._is_eligibility(part) and not _is_navigation_item(part):
+                        results.append(part)
+            if results:
+                return self._clean_items(results)
 
-        # From structured list elements
-        if not results:
-            list_selectors = [
-                ".eligibility li", ".criteria li",
-                "[class*='eligibility'] li", "[class*='criteria'] li",
-                "[class*='qualification'] li", "ul li", "ol li",
-            ]
-            for sel in list_selectors:
-                for el in self.css(sel):
-                    text = el.xpath("string(.)").get(default="").strip()
-                    if self._is_eligibility(text):
-                        results.append(text)
-                        if len(results) >= 10:
-                            break
+        # ── B. Semantic section detection (navigation-safe) ───────────────────
+        results = self._find_content_list(_ELIGIBILITY_HEADINGS, self._is_eligibility)
+        if results:
+            return self._clean_items(results)
+
+        # ── C. Regex over clean_text ──────────────────────────────────────────
+        page_text = fallback_text or self.clean_text
+        patterns = [
+            r"eligibility[:\s]*([^.!?\n]*(?:\n[^.!?\n]*){0,5})",
+            r"eligible\s*(?:candidates?|applicants?)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*){0,5})",
+            r"who\s*can\s*apply[:\s]*([^.!?\n]*(?:\n[^.!?\n]*){0,5})",
+            r"criteria[:\s]*([^.!?\n]*(?:\n[^.!?\n]*){0,5})",
+            r"qualifications?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*){0,5})",
+        ]
+        for pattern in patterns:
+            for m in re.finditer(pattern, page_text, re.IGNORECASE | re.MULTILINE):
+                chunk = m.group(1).strip()
+                items = self._split_items(chunk, self._is_eligibility)
+                items = [i for i in items if not _is_navigation_item(i)]
+                results.extend(items)
                 if results:
                     break
+            if results:
+                break
 
-        # Regex patterns over page text
+        # ── D. Structured keyword fallback ────────────────────────────────────
         if not results:
-            page_text = fallback_text or self.clean_text
-            patterns = [
-                r"eligibility[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"eligible\s*(?:candidates?|applicants?)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"who\s*can\s*apply[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"criteria[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"qualifications?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"must\s*be[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-            ]
-            for pattern in patterns:
-                for m in re.finditer(pattern, page_text, re.IGNORECASE | re.MULTILINE):
-                    chunk = m.group(1).strip()
-                    items = self._split_items(chunk, self._is_eligibility)
-                    results.extend(items)
-                    if results:
-                        break
-                if results:
-                    break
+            results = self._common_eligibility(page_text)
 
-        # Keyword fallback
-        if not results:
-            results = self._common_eligibility(fallback_text or self.clean_text)
+        cleaned = self._clean_items(results)
 
-        return self._clean_items(results) or ["Eligibility criteria not specified"]
+        # ── E. Validation gate — if still looks like nav, return empty ─────────
+        # Signal to caller (spider / process_new_submission) that LLM is needed
+        if not cleaned or all(_is_navigation_item(r) for r in cleaned):
+            return []   # Empty → QualityCheck will flag → LLM fires
+
+        return cleaned
 
     # ─────────────────────────────────────────────────────────────────────────
     # 6. REQUIREMENTS
@@ -621,65 +837,59 @@ class ScholarshipExtractor:
     ) -> list[str]:
         results: list[str] = []
 
+        # ── A. Targeted CSS selector ──────────────────────────────────────────
         if css_selector:
             raw = self._section_text(css_selector)
             if raw:
                 for header in ["Requirements:", "Documents Required:", "What you need:"]:
                     raw = raw.replace(header, "")
                 for part in re.split(r"[\n;•►→➤]", raw):
-                    if self._is_requirement(part.strip()):
-                        results.append(part.strip())
+                    part = _clean_bullet(part).strip()
+                    if self._is_requirement(part) and not _is_navigation_item(part):
+                        results.append(part)
+            if results:
+                return self._clean_items(results)
 
-        if not results:
-            list_selectors = [
-                ".requirements li", ".documents li",
-                "[class*='requirement'] li", "[class*='document'] li",
-                "ul li", "ol li",
-            ]
-            for sel in list_selectors:
-                for el in self.css(sel):
-                    text = el.xpath("string(.)").get(default="").strip()
-                    if self._is_requirement(text):
-                        results.append(text)
-                        if len(results) >= 10:
-                            break
+        # ── B. Semantic section detection ─────────────────────────────────────
+        results = self._find_content_list(_REQUIREMENTS_HEADINGS, self._is_requirement)
+        if results:
+            return self._clean_items(results)
+
+        # ── C. Regex over clean_text ──────────────────────────────────────────
+        page_text = fallback_text or self.clean_text
+        patterns = [
+            r"requirements?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*){0,5})",
+            r"documents?\s*(?:required|needed)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*){0,5})",
+            r"application\s*requirements?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*){0,5})",
+            r"must\s*(?:provide|submit|include)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*){0,5})",
+        ]
+        for pattern in patterns:
+            for m in re.finditer(pattern, page_text, re.IGNORECASE | re.MULTILINE):
+                chunk = m.group(1).strip()
+                items = self._split_items(chunk, self._is_requirement)
+                items = [i for i in items if not _is_navigation_item(i)]
+                results.extend(items)
                 if results:
                     break
+            if results:
+                break
 
+        # ── D. Keyword fallback ───────────────────────────────────────────────
         if not results:
-            page_text = fallback_text or self.clean_text
-            patterns = [
-                r"requirements?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"documents?\s*(?:required|needed)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"application\s*requirements?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"needed\s*documents?[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"submit[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-                r"must\s*(?:provide|submit|include)[:\s]*([^.!?\n]*(?:\n[^.!?\n]*)*)",
-            ]
-            for pattern in patterns:
-                for m in re.finditer(pattern, page_text, re.IGNORECASE | re.MULTILINE):
-                    chunk = m.group(1).strip()
-                    items = self._split_items(chunk, self._is_requirement)
-                    results.extend(items)
-                    if results:
-                        break
-                if results:
-                    break
+            results = self._common_requirements(page_text)
 
-        if not results:
-            results = self._common_requirements(fallback_text or self.clean_text)
+        cleaned = self._clean_items(results)
 
-        return self._clean_items(results) or ["Requirements not specified"]
+        if not cleaned or all(_is_navigation_item(r) for r in cleaned):
+            return []   # Empty → LLM fires
+
+        return cleaned
 
     # ─────────────────────────────────────────────────────────────────────────
     # 7. LEVELS
     # ─────────────────────────────────────────────────────────────────────────
 
-    def extract_levels(
-        self,
-        css_selector: Optional[str] = None,
-        extra_text: str = "",
-    ) -> list[str]:
+    def extract_levels(self, css_selector: Optional[str] = None, extra_text: str = "") -> list[str]:
         if css_selector:
             extracted = self.css(css_selector).getall()
             cleaned = [x.strip().lower() for x in extracted if x.strip()]
@@ -691,9 +901,9 @@ class ScholarshipExtractor:
         all_text   = f"{self.clean_text} {title_text} {meta_desc} {extra_text}".lower()
 
         level_keywords = {
-            "highschool":    ["secondary school", "high school", "ssce", "waec", "neco", "alevel", "k12"],
-            "undergraduate": ["undergraduate", "bachelor", "bsc", "ba", "first degree", "college student"],
-            "postgraduate":  ["postgraduate", "masters", "msc", "ma", "mphil", "graduate school"],
+            "highschool":    ["secondary school", "high school", "ssce", "waec", "neco", "a-level", "k12"],
+            "undergraduate": ["undergraduate", "bachelor", "bsc", "ba ", "first degree", "college student"],
+            "postgraduate":  ["postgraduate", "masters", "msc", "ma ", "mphil", "graduate school"],
             "phd":           ["phd", "doctorate", "doctoral", "dphil", "research degree"],
         }
         detected = {lvl for lvl, kws in level_keywords.items() if any(k in all_text for k in kws)}
@@ -703,11 +913,7 @@ class ScholarshipExtractor:
     # 8. TAGS
     # ─────────────────────────────────────────────────────────────────────────
 
-    def extract_tags(
-        self,
-        css_selector: Optional[str] = None,
-        extra_text: str = "",
-    ) -> list[str]:
+    def extract_tags(self, css_selector: Optional[str] = None, extra_text: str = "") -> list[str]:
         if css_selector:
             extracted = self.css(css_selector).getall()
             cleaned = [x.strip().lower() for x in extracted if x.strip()]
@@ -726,7 +932,6 @@ class ScholarshipExtractor:
         }
 
         tags: set[str] = set()
-
         for tag, kws in tag_keywords.items():
             if any(kw in all_text for kw in kws):
                 tags.add(tag)
@@ -739,7 +944,9 @@ class ScholarshipExtractor:
                     if get_close_matches(mt, [key], n=1, cutoff=0.8):
                         tags.add(key)
 
-        for sel in [".tags a", ".categories a", ".tag", ".category", "[class*='tag']", "[class*='category']"]:
+        # Only use tag/category selectors, not generic nav
+        for sel in [".tags a", ".categories a", ".tag", ".category",
+                    "[class*='tag']", "[class*='category']"]:
             for el in self.css(sel)[:5]:
                 tag_text = _normalize(el.xpath("string(.)").get(default=""))
                 for key, kws in tag_keywords.items():
@@ -754,51 +961,87 @@ class ScholarshipExtractor:
 
     @staticmethod
     def _is_eligibility(text: str) -> bool:
+        if not text or _is_navigation_item(text):
+            return False
+        # Must have at least 5 words to be a real criterion
+        if len(text.split()) < 5:
+            return False
         keywords = [
-            "citizen", "age", "year", "grade", "gpa", "cgpa", "score", "level",
-            "undergraduate", "graduate", "student", "enrolled", "admitted",
-            "nationality", "resident", "income", "family", "female", "male",
-            "minority", "disability", "field of study", "department", "faculty",
-            "university", "college",
+            "citizen", "nationality", "age", "year old", "year of age",
+            "grade", "gpa", "cgpa", "score",
+            "undergraduate", "postgraduate", "graduate", "student",
+            "enrolled", "admitted", "applicant",
+            "resident", "income", "family",
+            "female", "male", "gender",
+            "minority", "disability", "field of study",
+            "department", "faculty", "university", "college",
+            "must be", "must have", "should be", "should have",
+            "open to", "available to", "eligible",
         ]
         t = text.lower()
-        return any(k in t for k in keywords) and 15 < len(text) < 200
+        # Require a keyword AND that it reads like a criterion (not a nav label)
+        has_keyword = any(k in t for k in keywords)
+        has_verb    = any(v in t for v in ["must", "should", "need", "require",
+                                            "open", "eligible", "have", "be a", "be an"])
+        return (has_keyword or has_verb) and 15 < len(text) < 300
 
     @staticmethod
     def _is_requirement(text: str) -> bool:
+        if not text or _is_navigation_item(text):
+            return False
+        if len(text.split()) < 4:
+            return False
         keywords = [
-            "transcript", "certificate", "cv", "resume", "letter", "essay",
-            "statement", "recommendation", "reference", "passport", "photo",
+            "transcript", "certificate", "cv", "resume", "letter",
+            "essay", "statement", "recommendation", "reference",
+            "passport", "photo", "photograph",
             "application form", "birth certificate", "identification",
-            "academic record", "degree", "diploma", "ssce", "waec", "jamb",
-            "bank statement", "financial", "medical report", "upload", "submit",
+            "academic record", "degree", "diploma",
+            "ssce", "waec", "jamb", "neco",
+            "bank statement", "financial", "medical report",
+            "upload", "submit", "attach", "provide",
+            "official", "certified", "notarized",
+            "two copies", "three copies",
         ]
         t = text.lower()
-        return any(k in t for k in keywords) and 15 < len(text) < 200
+        return any(k in t for k in keywords) and 15 < len(text) < 300
 
     @staticmethod
     def _split_items(text: str, validator) -> list[str]:
         for delimiter in ["\n", ";", "•", "►", "→", "➤"]:
             if delimiter in text:
-                return [p.strip() for p in text.split(delimiter) if validator(p.strip())]
+                return [_clean_bullet(p).strip()
+                        for p in text.split(delimiter)
+                        if validator(_clean_bullet(p).strip())]
         sentences = re.split(r"[.!?]", text)
         return [s.strip() for s in sentences if validator(s.strip())] or [text.strip()]
 
     @staticmethod
     def _clean_items(items: list[str], max_items: int = 10) -> list[str]:
         cleaned = []
-        for item in items[:max_items]:
+        for item in items[:max_items * 2]:
             item = _clean_bullet(item)
-            if 10 < len(item) < 200:
-                cleaned.append(item.capitalize())
-        return list(dict.fromkeys(cleaned))  # deduplicate, preserve order
+            if 12 < len(item) < 300 and not _is_navigation_item(item):
+                cleaned.append(item[0].upper() + item[1:] if item else item)
+        # Deduplicate preserving order
+        seen = set()
+        deduped = []
+        for item in cleaned:
+            key = _normalize(item)
+            if key not in seen:
+                seen.add(key)
+                deduped.append(item)
+        return deduped[:max_items]
 
     @staticmethod
     def _common_eligibility(page_text: str) -> list[str]:
         eligibility: list[str] = []
         t = page_text.lower()
 
-        age = re.search(r"(?:age|years?)\s*(?:between|from)?\s*(\d+)(?:\s*(?:to|and|-)\s*(\d+))?", t)
+        age = re.search(
+            r"(?:age|years?)\s*(?:between|from|of)?\s*(\d+)(?:\s*(?:to|and|-)\s*(\d+))?",
+            t
+        )
         if age:
             if age.group(2):
                 eligibility.append(f"Age between {age.group(1)} and {age.group(2)} years")
@@ -821,7 +1064,7 @@ class ScholarshipExtractor:
         if gpa:
             eligibility.append(f"Minimum GPA/CGPA of {gpa.group(1)}")
 
-        if "female only" in t:
+        if "female only" in t or "women only" in t:
             eligibility.append("Female students only")
         elif "male only" in t:
             eligibility.append("Male students only")
@@ -833,18 +1076,19 @@ class ScholarshipExtractor:
         t = page_text.lower()
         patterns = {
             "Academic Transcript":      ["transcript", "academic record"],
-            "CV/Resume":                ["cv", "resume", "curriculum vitae"],
-            "Passport Photograph":      ["passport photo", "recent photo"],
+            "CV or Resume":             ["cv", "resume", "curriculum vitae"],
+            "Passport Photograph":      ["passport photo", "recent photo", "passport photograph"],
             "Birth Certificate":        ["birth certificate"],
-            "Letter of Recommendation": ["recommendation letter", "reference letter"],
-            "Statement of Purpose":     ["statement of purpose", "personal statement"],
+            "Letter of Recommendation": ["recommendation letter", "reference letter", "letter of recommendation"],
+            "Statement of Purpose":     ["statement of purpose", "personal statement", "motivation letter"],
             "Application Form":         ["application form", "completed form"],
-            "Academic Certificates":    ["certificate", "degree certificate"],
-            "Identification Document":  ["id card", "identification", "national id"],
+            "Academic Certificates":    ["academic certificate", "degree certificate"],
+            "Valid ID / Passport":      ["national id", "valid passport", "identification document"],
         }
-        return [name for name, kws in patterns.items() if any(k in t for k in kws)]    
+        return [name for name, kws in patterns.items() if any(k in t for k in kws)]
+
     
-    
+
 # SiteConfig.objects.create(
 #     name="Scholarship Region",
 #     base_url="https://www.scholarshipregion.com",

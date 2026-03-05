@@ -5,6 +5,7 @@ const ProfileCompletion = ({ percentage }) => {
   const navigate = useNavigate();
 
   // Color logic: Red for low, Yellow for medium, Green for high
+  const score = Math.round(Number(percentage)) || 0;
   const getColor = (score) => {
     if (score < 40) return "bg-red-500";
     if (score < 80) return "bg-yellow-500";
@@ -18,8 +19,6 @@ const ProfileCompletion = ({ percentage }) => {
   };
 
   // Optional: Hide completely if 100% (uncomment if you prefer that)
-  if (percentage >= 100) return null;
-
   return (
     <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-8 transition-colors">
       
@@ -35,7 +34,7 @@ const ProfileCompletion = ({ percentage }) => {
         </div>
         
         <div className="flex items-center gap-2">
-          <span className={`text-2xl font-bold ${getTextColor(percentage)}`}>
+          <span className={`text-2xl font-bold ${getTextColor(score)}`}>
             {percentage}%
           </span>
         </div>
@@ -45,13 +44,13 @@ const ProfileCompletion = ({ percentage }) => {
       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-3 mb-4 overflow-hidden border border-slate-100 dark:border-slate-700">
         {/* Progress Bar Fill */}
         <div 
-          className={`h-full rounded-full transition-all duration-1000 ease-out ${getColor(percentage)}`}
-          style={{ width: `${percentage}%` }}
+          className={`h-full rounded-full transition-all duration-1000 ease-out ${getColor(score)}`}
+          style={{ width: `${score}%` }}
         ></div>
       </div>
 
       {/* Call to Action */}
-      {percentage < 100 ? (
+      {score < 100 ? (
         <button 
           onClick={() => navigate('/profile')}
           className="text-sm font-semibold text-primary hover:text-primary/80 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 transition-colors"

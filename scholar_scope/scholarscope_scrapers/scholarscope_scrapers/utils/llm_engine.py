@@ -10,6 +10,7 @@ from asgiref.sync import sync_to_async
 from dotenv import load_dotenv
 import logging
 from pathlib import Path
+from scholarships.utils import generate_text
 logger = logging.getLogger("scholar_scope")
 logger.setLevel(logging.DEBUG)
 # 2. Load it explicitly
@@ -35,38 +36,55 @@ load_dotenv(dotenv_path=env_path)
 
 class LLMEngine:
     def __init__(self):
-        api_key = os.getenv("GOOGLE_API_KEY")
-        genai.configure(api_key=api_key)
         self.logger = logging.getLogger(__name__)
-        
-        self.model = genai.GenerativeModel(
-             model_name="gemini-3-flash-preview", 
-             generation_config={"response_mime_type": "application/json"}
-         )
-
-        self.safety_settings = {
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-        }
 
     def _prepare_content(self, input_data):
+        """
+        Clean HTML before sending to the LLM.
+
+        Strips nav/sidebar/footer elements FIRST using parsel, THEN runs
+        trafilatura. This prevents sidebar category lists like
+        "undergraduate scholarships / phd scholarships / competitions"
+        from polluting the LLM prompt as if they were eligibility criteria.
+        """
         if not input_data:
             return ""
-
         if isinstance(input_data, dict):
             return json.dumps(input_data, indent=2)
-
         if isinstance(input_data, str):
-            if "<html" in input_data.lower() or "<body" in input_data.lower() or "<div" in input_data.lower():
-                extracted = trafilatura.extract(input_data)
-                return extracted if extracted else ""
-            else:
-                return input_data
+            if any(tag in input_data.lower() for tag in ("<html", "<body", "<div")):
+                try:
+                    from parsel import Selector
+                    sel = Selector(text=input_data)
+                    noise_selectors = [
+                        "nav", "header", "footer", "aside",
+                        "[class*='sidebar']", "[class*='widget']",
+                        "[class*='related']", "[class*='menu']",
+                        "[class*='nav']", "[class*='breadcrumb']",
+                        "[id*='sidebar']", "[id*='nav']", "[id*='menu']",
+                    ]
+                    for ns in noise_selectors:
+                        try:
+                            for el in sel.css(ns):
+                                if el.root.getparent() is not None:
+                                    el.root.getparent().remove(el.root)
+                        except Exception:
+                            pass
+                    cleaned_html = sel.get()
+                except Exception:
+                    cleaned_html = input_data
 
+                extracted = trafilatura.extract(
+                    cleaned_html,
+                    include_comments=False,
+                    include_tables=True,
+                    no_fallback=False,
+                )
+                return extracted if (extracted and len(extracted) > 100) else ""
+            return input_data
         return str(input_data)
-
+    
+    
     async def extract_data(self, html_content, url):
         clean_text = self._prepare_content(html_content)
         if not clean_text or len(clean_text) < 100:
@@ -104,8 +122,7 @@ class LLMEngine:
         TEXT TO PROCESS:
         {clean_text} 
         """
-
-        return await self._call_gemini(prompt)
+        return await generate_text(prompt, response_format="json")
 
     async def recover_specific_fields(self, html_content, missing_fields):
         clean_text = self._prepare_content(html_content)
@@ -147,48 +164,27 @@ class LLMEngine:
         {clean_text}
         """
 
-        return await self._call_gemini(prompt)
-
-    async def _call_gemini(self, prompt, max_retries=3, initial_delay=2):
-        delay = initial_delay
-
-        for attempt in range(max_retries + 1):
-            try:
-                response = await asyncio.to_thread(
-                    self.model.generate_content,
-                    prompt,
-                    safety_settings=self.safety_settings
-                )
-                return json.loads(response.text)
-
-            except Exception as e:
-                error_msg = str(e)
-                
-                if "429" in error_msg or "ResourceExhausted" in error_msg:
-                    if attempt < max_retries:
-                        print(f"Gemini Rate Limit (Attempt {attempt+1}/{max_retries}). Sleeping {delay}s...")
-                        await asyncio.sleep(delay)
-                        
-                        delay *= 2 
-                        continue
-                    else:
-                        print(f"Gemini Rate Limit Persisted. Giving up after {max_retries} retries.")
-                        return {}
-
-                print(f"Gemini Error: {error_msg}")
-                return {}
-        
-        return {}
+        return await generate_text(prompt)    
     
-    # used for local development
-    async def draft_essays(self, profile, prompts_list: list[dict]) -> list[dict]:
+    async def draft_essays(
+        self,
+        profile,
+        prompts_list: list[dict],
+        scholarship_context: str = "",   
+    ) -> list[dict]:
         """
-        Now uses RAG: retrieves only relevant profile chunks per prompt
-        instead of sending the entire profile every time.
+        Draft essays using RAG + structured profile facts.
+
+        scholarship_context is the pre-built string from _build_scholarship_context_block()
+        in views.py. It's appended between the structured profile facts and the question
+        so the model sees exactly what the scholarship values without any special handling.
+
+        Used by the local/async code path (development).
+        The Celery production path builds the same string in views.py and passes it
+        as part of `structured_context` to draft_single_essay.
         """
         from .rag import build_rag_context
 
-        # Structured facts that always go in (short, low-token)
         structured_context = (
             f"Name: {profile.full_name or 'Not provided'}\n"
             f"Field of Study: {profile.field_of_study or 'Not provided'}\n"
@@ -199,92 +195,79 @@ class LLMEngine:
             f"Career Goals: {profile.career_goals or 'Not provided'}\n"
         )
 
-        instructions = (
+        # Append inline scholarship context when present
+        if scholarship_context and scholarship_context.strip():
+            structured_context += scholarship_context
+
+        SYSTEM_PROMPT = (
             "You are an expert scholarship application coach writing in the applicant's "
             "authentic voice. Rules:\n"
             "1. Use ONLY the provided profile information — never invent facts.\n"
             "2. Write in first person.\n"
             "3. Be specific and concrete — vague answers fail.\n"
             "4. Respect the word limit exactly.\n"
-            "5. Return ONLY the essay text, no labels or markdown."
+            "5. Return ONLY the essay text, no labels or markdown.\n"
+            "6. If scholarship context is provided, tailor the essay to what "
+            "   that scholarship values and who it targets."
         )
 
-        import asyncio
-
-        async def _draft_single(item: dict) -> dict:
-            question  = item.get("prompt", "").strip()
-            item_id   = item.get("id", "")
-            max_words = int(item.get("max_words") or 200)
-
-            if not question:
-                return {"id": item_id, "draft": "", "word_count": 0, "confidence": "low"}
-
-            # ── RAG: only send relevant chunks for this specific question ─────────
-            relevant_context = await build_rag_context(profile, question)
-
-            user_prompt = (
-                f"{instructions}"
-                f"Structured Profile:\n{structured_context}\n\n"
-                f"Relevant Experience (retrieved for this question):\n{relevant_context}\n\n"
-                f"Scholarship Question:\n{question}\n\n"
-                f"Write a response of NO MORE THAN {max_words} words."
-            )
-
-            try:
-                if os.getenv("USE_OLLAMA") == "True":
-                    response = await asyncio.to_thread(
-                        ollama.generate,
-                        model="gpt-oss:120b-cloud",
-                        prompt=f"{instructions}\n\n{user_prompt}",
-                        options={
-                            "temperature": 0.75,
-                            "num_predict": max_words * 6,
-                        }
-                    )
-                    draft_text = response['response'].strip()
-                else:
-                    response = await self.model.generate_content_async(
-                        contents=user_prompt,
-                        generation_config={
-                            "temperature": 0.75,
-                            "max_output_tokens": max_words * 6,
-                            "top_p": 0.9,
-                        }
-                    )
-
-                    draft_text = response.text.strip()
-                def get_confidence_sync(p):
-                    return ProfileChunk.objects.filter(profile=p).exclude(text="").count()
-                filled_chunks = await sync_to_async(get_confidence_sync)(profile)
-                confidence = (
-                    "high"   if filled_chunks >= 5 else
-                    "medium" if filled_chunks >= 2 else
-                    "low"
-                )
-
-                return {
-                    "id":         item_id,
-                    "draft":      draft_text,
-                    "word_count": len(draft_text.split()),
-                    "confidence": confidence,
-                }
-
-            except Exception as exc:
-                logger.error(f"[RAG] Draft failed for prompt {item_id}: {exc}")
-                return {"id": item_id, "draft": "", "word_count": 0, "confidence": "failed"}
-
-        # results = await asyncio.gather(*[_draft_single(item) for item in prompts_list])
-        # return list(results)
         semaphore = asyncio.Semaphore(2)
 
-        async def _draft_single_with_limit(item: dict) -> dict:
+        async def _draft_single(item: dict) -> dict:
             async with semaphore:
-                return await _draft_single(item)
+                question  = item.get("prompt", "").strip()
+                item_id   = item.get("id", "")
+                max_words = int(item.get("max_words") or 200)
 
-        # 3. Call the limited version instead
-        results = await asyncio.gather(*[_draft_single_with_limit(item) for item in prompts_list])
+                if not question:
+                    return {"id": item_id, "draft": "", "word_count": 0, "confidence": "low"}
+
+                relevant_context = await build_rag_context(profile, question)
+
+                user_prompt = (
+                    f"Instructions:\n{SYSTEM_PROMPT}\n\n"
+                    f"Structured Profile:\n{structured_context}\n\n"
+                    f"Relevant Experience (retrieved for this question):\n{relevant_context}\n\n"
+                    f"Scholarship Question:\n{question}\n\n"
+                    f"Write a response of NO MORE THAN {max_words} words."
+                )
+
+                try:
+                    if os.getenv("USE_OLLAMA") == "True":
+                        response = await asyncio.to_thread(
+                            ollama.generate,
+                            model="gpt-oss:120b-cloud",
+                            prompt=user_prompt,
+                            options={"temperature": 0.75, "num_predict": max_words * 6},
+                        )
+                        draft_text = response["response"].strip()
+                    else:
+                        draft_text = await generate_text(user_prompt, response_format="text", max_words=max_words)
+
+                    def _count_chunks(p):
+                        return ProfileChunk.objects.filter(profile=p).exclude(text="").count()
+
+                    filled_chunks = await sync_to_async(_count_chunks)(profile)
+                    confidence = (
+                        "high"   if filled_chunks >= 5 else
+                        "medium" if filled_chunks >= 2 else
+                        "low"
+                    )
+
+                    return {
+                        "id":         item_id,
+                        "draft":      draft_text,
+                        "word_count": len(draft_text.split()),
+                        "confidence": confidence,
+                    }
+
+                except Exception as exc:
+                    logger.error(f"[RAG] Draft failed for prompt {item_id}: {exc}")
+                    return {"id": item_id, "draft": "", "word_count": 0, "confidence": "failed"}
+
+        results = await asyncio.gather(*[_draft_single(item) for item in prompts_list])
         return list(results)
-    
+
     async def refine_essay(
         self,
         profile_dict: dict,
@@ -322,20 +305,13 @@ class LLMEngine:
         )
 
         try:
-            response = await self.model.generate_content_async(
-                contents=user_prompt,
-                generation_config={
-                    "temperature": 0.70,
-                    "max_output_tokens": max_words * 6,
-                    "top_p": 0.9,
-                },
-            )
+            response = await generate_text(prompt=user_prompt, max_words=max_words)
 
             revised = response.text.strip()
             return {
                 "draft":      revised,
                 "word_count": len(revised.split()),
-                "confidence": "high",   # user-guided = always high confidence
+                "confidence": "high",  
             }
 
         except Exception as exc:

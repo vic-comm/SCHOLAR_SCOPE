@@ -38,8 +38,6 @@ export default function Home(){
 
   const handleBookmarkToggle = async(id, is_bookmarked) => {
 
-    e.preventDefault();
-    e.stopPropagation();
     // Optimistically update UI
     setScholarships(scholarships => 
       scholarships.map(s => 
@@ -64,7 +62,6 @@ export default function Home(){
   }
 
   const handleToggleWatch = async (id) => {
-  // 1. Find the current scholarship to know its state
   const targetScholarship = scholarships.find((s) => s.id === id);
   if (!targetScholarship) return;
 

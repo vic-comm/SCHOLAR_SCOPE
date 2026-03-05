@@ -1,33 +1,15 @@
 # scholarscope_scrapers/pipelines.py
-from django.utils import timezone
-# from scholarships.tasks import bulk_create 
 import logging
-from django.db import IntegrityError, transaction
-from django.db.models import Q
-from fuzzywuzzy import fuzz
 from scrapy.exceptions import DropItem
-import logging
 import os
 from itemadapter import ItemAdapter
-from datetime import datetime
-from dateutil import parser as date_parser
 from django.utils import timezone
-from django.db import IntegrityError, transaction
-from django.db.models import Q
-from rapidfuzz import fuzz
-from scholarships.models import (
-    Scholarship,
-    ScholarshipScrapeEvent,
-)
+from django.db import transaction
 from scholarships.utils import generate_fingerprint
-from scholarships.models import Scholarship, ScholarshipScrapeEvent, Tag, Level
+from scholarships.models import Scholarship, ScholarshipScrapeEvent, Tag, Level, ScholarshipCycle
 from asgiref.sync import sync_to_async
 from rapidfuzz import fuzz, utils
-from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
-from django.utils import timezone
-from datetime import datetime
-from scholarships.models import Scholarship, ScholarshipCycle
 
 logger = logging.getLogger(__name__)
 
@@ -190,40 +172,4 @@ class RenewalAndDuplicatePipeline:
                 best_match.save()
                 raise DropItem(f"Handled as Renewal for ID {best_match.id}")
         return item
-
-# def normalize_title(title):
-#     if not title:
-#         return ""
-#     return " ".join(title.split()).strip().lower()
-
-
-# def extract_domain(url):
-#     try:
-#         from urllib.parse import urlparse
-#         parsed = urlparse(url)
-#         return parsed.netloc.lower()
-#     except Exception:
-#         return ""
-
-
-# def parse_date_maybe(date_val):
-#     if not date_val:
-#         return None
-#     if hasattr(date_val, "date"):
-#         try:
-#             return date_val.date()
-#         except Exception:
-#             pass
-#     s = str(date_val).strip()
-#     if not s:
-#         return None
-#     s = s.lower()
-#     for prefix in ["on ", "by ", "until ", "closing date:", "deadline:"]:
-#         if s.startswith(prefix):
-#             s = s[len(prefix):].strip()
-#     try:
-#         dt = date_parser.parse(s, fuzzy=True, dayfirst=True)
-#         return dt.date()
-#     except Exception:
-#         return None
 

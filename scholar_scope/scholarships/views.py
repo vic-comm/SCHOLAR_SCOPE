@@ -1,7 +1,7 @@
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
 from allauth.account.views import SignupView
-from .models import Scholarship, Bookmark, Application, Profile, SiteConfig, WatchedScholarship, ScrapeSubmission
+from scholarships.models import Scholarship, Bookmark, Application, Profile, SiteConfig, WatchedScholarship, ScrapeSubmission, Tag, Level
 from .tasks import process_new_submission
 from rest_framework import status
 from django.contrib.postgres.search import SearchVector, SearchRank, SearchQuery
@@ -19,13 +19,10 @@ from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from django.conf import settings
 from .utils import get_cached_recommendations
-from .serializers import ProfileSerializer
-from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from asgiref.sync import async_to_sync
 import datetime
 import dateparser
-from .models import Scholarship
 from .utils import ScholarshipExtractor
 from scholarscope_scrapers.scholarscope_scrapers.utils.llm_engine import LLMEngine
 from scholarscope_scrapers.scholarscope_scrapers.utils.quality import QualityCheck
@@ -33,6 +30,9 @@ import uuid
 from django.core.cache import cache
 from scholarships.tasks import draft_essays_batch
 import logging
+from urllib.parse import urlparse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class ScholarshipViewset(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ['list', 'retrieve', 'details']:
             return [AllowAny()] 
-        elif self.action in ['bookmark_scholarship', 'unbookmark', 'save', 'unsave_scholarship', 'apply']:
+        elif self.action in ['bookmark_scholarship', 'unbookmark', 'save', 'unsave_scholarship', 'apply', 'create']:
             return [IsAuthenticated()]
         else:
             return [IsAdminUser()]
@@ -99,27 +99,6 @@ class ScholarshipViewset(viewsets.ModelViewSet):
             queryset = queryset.order_by("-created_at")
 
         return queryset
-    # def get_queryset(self):
-    #     queryset = Scholarship.objects.all()
-        
-    #     query = self.request.query_params.get('q')
-    #     level = self.request.query_params.get('level') 
-    #     tag = self.request.query_params.get('tag')        
-        
-    #     if query:
-    #         queryset = queryset.filter(
-    #             Q(title__icontains=query) |
-    #             Q(description__icontains=query) |
-    #             Q(tags__name__icontains=query)
-    #         ).distinct()
-            
-    #     if level:
-    #         queryset = queryset.filter(level__level__iexact=level)
-            
-    #     if tag:
-    #         queryset = queryset.filter(tags__name__iexact=tag)
-            
-    #     return queryset.order_by('-created_at')
     
     @action(detail=True, methods=['post'])
     def bookmark_scholarship(self, request, pk=None):
@@ -130,7 +109,6 @@ class ScholarshipViewset(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def unbookmark(self, request, pk=None):
         scholarship = get_object_or_404(Scholarship, id=pk)
-        # Bookmark.objects.filter(user=request.user, scholarship=scholarship).delete()
         request.user.bookmarked_scholarships.remove(scholarship)
         return Response({'message':"Scholarship unbookmarked"})
 
@@ -205,6 +183,8 @@ class ScholarshipViewset(viewsets.ModelViewSet):
             "message": "You will be notified when this scholarship reopens next year."
         })
     
+
+    
 def recommend_scholarships(request):
     profile = request.user.profile
     bookmarked_ids = Bookmark.objects.filter(user=request.user).values_list('scholarship_id', flat=True)
@@ -216,18 +196,28 @@ def recommend_scholarships(request):
 
     return result
 
-# class ProfileViewSet(viewsets.ModelViewSet):
-#     serializer_class = ProfileSerializer
-#     permission_classes = [permissions.IsAuthenticated]
+class ApplicationViewSet(viewsets.ModelViewSet):
+    serializer_class = ApplicationSerializer
+    permission_classes = [IsAuthenticated]
 
-#     def get_queryset(self):
-#         return Profile.objects.filter(user=self.request.user)
+    def get_queryset(self):
+        return Application.objects.filter(user=self.request.user)
 
-#     def perform_create(self, serializer):
-#         serializer.save(user=self.request.user)
+    @action(detail=True, methods=['patch'])
+    def update_status(self, request, pk=None):
+        application = self.get_object()
+        new_status = request.data.get('status')
 
-#     def perform_update(self, serializer):
-#         serializer.save(user=self.request.user)
+        valid_statuses = [choice[0] for choice in Application.STATUS_CHOICES]
+        if new_status not in valid_statuses:
+            return Response(
+                {"error": f"Invalid status. Must be one of: {valid_statuses}"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        application.status = new_status
+        application.save()
+        return Response({"status": "Status updated successfully", "new_status": application.status})
 
 class UserViewset(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
@@ -252,37 +242,50 @@ class UserViewset(viewsets.ViewSet):
         watched_records = WatchedScholarship.objects.filter(user=user).select_related('scholarship')
         watched_scholarships = [record.scholarship for record in watched_records]
         recent_applications = Application.objects.filter(user=user).select_related('scholarship').order_by('-submitted_at')
-        recent_apps = list(ApplicationSerializer(recent_applications, many=True, context={'request': request}).data)
+        # recent_apps = list(ApplicationSerializer(recent_applications, many=True, context={'request': request}).data)
         recent_bookmarks = Bookmark.objects.filter(
             user=user
         ).select_related('scholarship').order_by('-bookmarked_at')
-        personal_scrapes = ScrapeSubmission.objects.filter(user=user).order_by('-created_at')
+        personal_scrapes = ScrapeSubmission.objects.filter(user=user, status='APPROVED').order_by('-created_at')
+        recent_apps = []
+        for app in recent_applications:
+            app_dict = ApplicationSerializer(app, context={'request': request}).data
+            app_dict['is_scrape'] = False
+            
+            # Replace the integer ID with a full dictionary
+            if app.scholarship:
+                app_dict['scholarship'] = {
+                    'id': app.scholarship.id,
+                    'title': app.scholarship.title,
+                    'link': getattr(app.scholarship, 'link', ''),
+                    'reward': getattr(app.scholarship, 'reward', None),
+                    'end_date': getattr(app.scholarship, 'end_date', None),
+                    'is_official': True  
+                }
+            else:
+                app_dict['scholarship'] = None
+                
+            recent_apps.append(app_dict)
 
         normalized_scrapes = []
         for item in personal_scrapes:
-            scholarship_details = item.scholarship
             normalized_scrapes.append({
                 'id': item.id,               
                 'status': item.application_status, 
-                'submitted_at': item.created_at,
+                'submitted_at': item.created_at.isoformat() if item.created_at else None,
                 'scholarship': {
                     # Check if relationship exists first
                     'id': item.scholarship.id if item.scholarship else None,
                     'title': item.title,
                     'link': item.link,
                     'reward': getattr(item, 'reward', None),
-                    'end_date': getattr(item, 'dealine', None),
+                    'end_date': getattr(item, 'deadline', None),
                     'is_official': False 
                 },
                 'is_scrape': True 
             })
 
-        # 5. Merge and Sort
-        # Add a flag to official apps too
-        for item in recent_apps:
-            item['is_scrape'] = False
-            item['scholarship']['is_official'] = True
-
+       
         all_tracked_items = sorted(
             recent_apps + normalized_scrapes, 
             key=lambda x: x['submitted_at'], 
@@ -343,43 +346,166 @@ class SiteConfigViewset(viewsets.ModelViewSet):
 class ScrapeSubmissionViewset(viewsets.ModelViewSet):
     queryset = ScrapeSubmission.objects.all()
     serializer_class = ScrapeSubmissionSerializer
-    
+
     def get_queryset(self):
         return ScrapeSubmission.objects.filter(user=self.request.user)
 
     def partial_update(self, request, *args, **kwargs):
         submission = self.get_object()
-        
         new_status = request.data.get('application_status')
         if new_status:
             submission.application_status = new_status
             submission.save()
             return Response({'status': 'updated', 'application_status': new_status})
         return Response({'error': 'No status provided'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    def create(self, request, *args, **kwargs):
-        data = request.data
-        link = data.get('url')
 
-        submission, _ = ScrapeSubmission.objects.get_or_create(
+    def create(self, request, *args, **kwargs):
+        data  = request.data
+        link  = data.get('url')
+        title = data.get('title', '')
+
+        # ── Fast path: scholarship already in DB ──────────────────────────────
+        # Check BEFORE creating a submission so we don't pollute the DB.
+        existing_scholarship = Scholarship.objects.filter(link=link).first()
+        if existing_scholarship:
+            submission, _ = ScrapeSubmission.objects.get_or_create(
+                user=request.user,
+                link=link,
+                defaults={
+                    'title':              title,
+                    'raw_data':           data,
+                    'application_status': 'pending',
+                    'scholarship':        existing_scholarship,
+                    'status':             'APPROVED',
+                }
+            )
+            Application.objects.get_or_create(
+                user=request.user,
+                scholarship=existing_scholarship,
+            )
+            sparse_fields = _sparse_scholarship_fields(existing_scholarship)
+            return Response(
+                {
+                    "id":            existing_scholarship.id,
+                    "submission_id": submission.id,
+                    "message":       "Scholarship found! Added to your applications.",
+                    # data_quality drives the frontend notice:
+                    # 'full'   → success screen, no warnings
+                    # 'sparse' → success screen + "missing fields" notice
+                    "data_quality":  "sparse" if sparse_fields else "full",
+                    "sparse_fields": sparse_fields,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # ── New submission: queue processing, return submission ID ────────────
+        # The frontend polls /submissions/<id>/status/ to find out what happened.
+        # We do NOT try to predict quality here — the Celery task already has
+        # QualityCheck built in, and it knows far more than the view does.
+        submission, created = ScrapeSubmission.objects.get_or_create(
             user=request.user,
             link=link,
-            title=data.get('title'),
-            raw_data=data,
-            application_status='pending'
+            defaults={
+                'title':              title,
+                'raw_data':           data,
+                'application_status': 'pending',
+                'status':             'PENDING',
+            }
         )
 
-        existing_scholarship = Scholarship.objects.filter(link=link).first()
-        
-        if existing_scholarship:
-            submission.scholarship = existing_scholarship
-            submission.status = 'APPROVED'
-            submission.save()
-            Application.objects.get_or_create(user=request.user, scholarship=existing_scholarship)
-            return Response({"message": "Scholarship found! Added to your applications."}, status=status.HTTP_200_OK)        
-        else:
+        if created or submission.status == 'PENDING':
             process_new_submission.delay(submission.id)
-            return Response({"message": "Saved! Processing for public verification..."}, status=status.HTTP_201_CREATED)
+
+        return Response(
+            {
+                "id":            None,           # scholarship ID not known yet
+                "submission_id": submission.id,  # frontend polls this
+                "message":       "Saved! Processing…",
+                "data_quality":  "processing",
+                "sparse_fields": [],
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    # ── Polling endpoint ──────────────────────────────────────────────────────
+    # GET /submissions/<id>/status/
+    # Called by the frontend every ~2s until status is no longer PENDING.
+    # Returns data_quality so the frontend knows what toast/notice to show.
+    @action(detail=True, methods=['get'])
+    def submission_status(self, request, pk=None):
+        sub = self.get_object()
+
+        if sub.status == 'PENDING':
+            return Response({
+                "submission_status": "processing",
+                "data_quality":      "processing",
+                "sparse_fields":     [],
+            })
+
+        if sub.status == 'REJECTED':
+            # QualityCheck flagged it as garbage or AI confirmed not a scholarship.
+            # raw_data['rejection_reason'] is set by process_new_submission.
+            reason = sub.raw_data.get('rejection_reason', '')
+            return Response({
+                "submission_status": "rejected",
+                # 'none' → "this page doesn't look like a scholarship" notice
+                "data_quality":      "none",
+                "rejection_reason":  reason,
+                "sparse_fields":     [],
+            })
+
+        if sub.status == 'APPROVED' and sub.scholarship:
+            sparse_fields = _sparse_scholarship_fields(sub.scholarship)
+            return Response({
+                "submission_status": "approved",
+                "scholarship_id":    sub.scholarship.id,
+                # 'full' | 'sparse' — drives the frontend notice
+                "data_quality":      "sparse" if sparse_fields else "full",
+                "sparse_fields":     sparse_fields,
+            })
+
+        # Fallback: still transitioning
+        return Response({
+            "submission_status": "processing",
+            "data_quality":      "processing",
+            "sparse_fields":     [],
+        })
+
+    @action(detail=True, methods=['patch'])
+    def update_status(self, request, pk=None):
+        scrape     = self.get_object()
+        new_status = request.data.get('status')
+        valid      = ['pending', 'submitted', 'rejected', 'accepted']
+        if new_status not in valid:
+            return Response(
+                {"error": f"Invalid status. Must be one of: {valid}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        scrape.application_status = new_status
+        scrape.save()
+        return Response({
+            "status":     "Status updated successfully",
+            "new_status": scrape.application_status,
+        })
+
+
+def _sparse_scholarship_fields(scholarship) -> list:
+    """
+    Returns names of fields that are missing or thin on a Scholarship record.
+    Used to warn the frontend when a saved record won't produce good essay drafts.
+    """
+    sparse = []
+    if not scholarship.description or len(scholarship.description.strip()) < 20:
+        sparse.append('description')
+    if not scholarship.eligibility or scholarship.eligibility == []:
+        sparse.append('eligibility')
+    if not scholarship.requirements or scholarship.requirements == []:
+        sparse.append('requirements')
+    if not scholarship.reward or len(str(scholarship.reward).strip()) < 3:
+        sparse.append('reward')
+    if not scholarship.end_date:
+        sparse.append('deadline')
+    return sparse
 
 
 @api_view(["POST"])
@@ -473,6 +599,9 @@ def _parse_dates_inplace(data: dict) -> None:
             dt = dateparser.parse(val)
             data[key] = dt.date() if dt else None
 
+def _normalise_url(raw: str) -> str:
+    parsed = urlparse(raw)
+    return parsed._replace(fragment="").geturl().rstrip("/")
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -539,59 +668,6 @@ def regenerate_essay(request):
         logger.exception(f"regenerate_essay: failed for user {user.id}: {exc}")
         return Response({"error": "Regeneration failed. Please try again."}, status=500)
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def start_essay_draft(request):
-    """
-    POST /api/scholarships/draft_essays/
-    
-    Returns immediately with a job_id.
-    Client polls /draft_essays/status/{job_id}/ for results.
-    This means the HTTP request never hangs waiting for Gemini.
-    """
-    prompts_list = request.data.get("prompts", [])
-    seen_prompts = set()
-    deduped = []
-    for item in prompts_list:
-        key = item.get('prompt', '').strip().lower()[:100]
-        if key and key not in seen_prompts:
-            seen_prompts.add(key)
-            deduped.append(item)
-    prompts_list = deduped[:10] 
-    if not prompts_list:
-        return Response({"error": "No prompts provided."}, status=400)
-    if len(prompts_list) > 10:
-        return Response({"error": "Maximum 10 prompts per request."}, status=400)
-
-    user    = request.user
-    profile = getattr(user, "profile", None)
-    if not profile:
-        return Response({"error": "Profile not found."}, status=404)
-
-    # Build structured context here (fast, synchronous)
-    structured_context = _build_structured_context(user, profile)
-
-    # Generate a unique job ID
-    job_id = str(uuid.uuid4())
-
-    # Store initial state so polling endpoint has something to return
-    cache.set(
-        f"essay_job:{job_id}",
-        {"status": "pending", "drafts": [], "failed": []},
-        timeout=3600,
-    )
-
-    # Fire and forget — Celery handles the rest
-    draft_essays_batch.delay(
-        job_id=job_id,
-        profile_id=profile.id,
-        prompts_list=prompts_list,
-        structured_context=structured_context,
-    )
-
-    return Response({"job_id": job_id, "status": "pending"}, status=202)
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_essay_draft_status(request, job_id: str):
@@ -608,13 +684,303 @@ def get_essay_draft_status(request, job_id: str):
     return Response(result, status=200)
 
 
-def _build_structured_context(user, profile) -> str:
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def check_scholarship(request):
+    """
+    GET /api/scholarships/check/?title=<page_title>&url=<page_url>
+
+    Updated strategy — title-based matching + suggestions fallback:
+      1. Try exact title match (iexact)
+      2. Try partial title match (icontains on first 40 chars)
+      3. Try URL match as last resort
+      4. If nothing found, return the 5 most recently saved scholarships
+         as suggestions so the user can manually link from the popup
+
+    Response when found:
+        { "id": 42, "title": "Gates Millennium Scholars", "matched": true }
+
+    Response when not found (with suggestions):
+        {
+          "id": null,
+          "matched": false,
+          "suggestions": [
+            {"id": 12, "title": "NHEF Scholars Program"},
+            {"id": 8,  "title": "MTN Foundation Scholarship"},
+            ...
+          ]
+        }
+    """
+    raw_title = request.query_params.get("title", "").strip()
+    raw_url   = request.query_params.get("url",   "").strip()
+
+    scholarship = None
+
+    # 1. Title exact match
+    if raw_title:
+        scholarship = Scholarship.objects.filter(
+            title__iexact=raw_title
+        ).first()
+
+    # 2. Partial title match — use first 40 chars to avoid noise
+    if not scholarship and raw_title:
+        short = raw_title[:40]
+        scholarship = (
+            Scholarship.objects.filter(title__icontains=short).first()
+            # Also try if the saved title is a substring of the page title
+            # e.g. saved "NHEF" matches page "NHEF Scholars Program Application"
+            or _fuzzy_title_match(raw_title)
+        )
+
+    # 3. URL fallback (still useful if user is on the exact saved URL)
+    if not scholarship and raw_url:
+        normalised = _normalise_url(raw_url)
+        scholarship = (
+            Scholarship.objects.filter(link=normalised).first()
+            or Scholarship.objects.filter(link=raw_url).first()
+        )
+
+    if scholarship:
+        return Response({
+            "id":      scholarship.id,
+            "title":   scholarship.title,
+            "matched": True,
+        }, status=200)
+
+    # 4. No match — return recent scholarships as manual-link suggestions
+    suggestions = (
+        Scholarship.objects
+        .order_by("-id")
+        .values("id", "title")[:5]
+    )
+    return Response({
+        "id":          None,
+        "matched":     False,
+        "suggestions": list(suggestions),
+    }, status=200)
+
+
+def _fuzzy_title_match(page_title: str):
+    """
+    Check if any saved scholarship title appears as a substring of the page title.
+    Handles: page title = "NHEF Scholars Program Application 2026"
+             saved title = "NHEF"  or  "NHEF Scholars Program"
+    """
+    # Only worth doing for short saved titles (long ones use icontains above)
+    for s in Scholarship.objects.only("id", "title").order_by("-id")[:100]:
+        if s.title and len(s.title) >= 4 and s.title.lower() in page_title.lower():
+            return s
+    return None
+
+
+def _normalise_url(raw: str) -> str:
+    parsed = urlparse(raw)
+    return parsed._replace(query="", fragment="").geturl().rstrip("/")
+
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def start_essay_draft(request):
+    """
+    POST /api/scholarships/draft_essays/
+
+    Body:
+        {
+            "prompts": [...],
+
+            // Tier 1 — ID of a saved scholarship record (best)
+            "scholarship_id": 42,
+
+            // Tier 2 — inline form fields (good)
+            "scholarship_context": {
+                "name": "...", "audience": "...", "values": "..."
+            },
+
+            // Tier 3 — always sent, page title/URL (minimum baseline)
+            "page_metadata": {
+                "title": "NHEF Scholars Program Application",
+                "url":   "https://portal.thenhef.org/..."
+            }
+        }
+    """
+    # ── Deduplicate + cap prompts ─────────────────────────────────────────
+    raw_prompts = request.data.get("prompts", [])
+    seen, deduped = set(), []
+    for item in raw_prompts:
+        key = item.get("prompt", "").strip().lower()[:100]
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(item)
+    prompts_list = deduped[:10]
+
+    if not prompts_list:
+        return Response({"error": "No prompts provided."}, status=400)
+
+    # ── Profile ───────────────────────────────────────────────────────────
+    user    = request.user
+    profile = getattr(user, "profile", None)
+    if not profile:
+        return Response({"error": "Profile not found."}, status=404)
+
+    # ── Build context in priority order ──────────────────────────────────
+    structured_context = _build_profile_context(user, profile)
+
+    scholarship_id      = request.data.get("scholarship_id")
+    scholarship_context = request.data.get("scholarship_context") or {}
+    page_metadata       = request.data.get("page_metadata") or {}
+
+    if scholarship_id:
+        # Tier 1: Full record from DB — richest context
+        rich = _build_rich_scholarship_context(scholarship_id)
+        if rich:
+            structured_context += rich
+        else:
+            # Record not found — fall through to tier 2/3
+            scholarship_id = None
+
+    if not scholarship_id:
+        if isinstance(scholarship_context, dict) and any(
+            (scholarship_context.get(k) or "").strip()
+            for k in ("name", "audience", "values")
+        ):
+            # Tier 2: Inline form fields
+            structured_context += _build_inline_context_block(scholarship_context)
+        elif page_metadata.get("title"):
+            # Tier 3: Page title only — at least the LLM knows what it's writing for
+            structured_context += _build_page_metadata_block(page_metadata)
+
+    # ── Enqueue ───────────────────────────────────────────────────────────
+    job_id = str(uuid.uuid4())
+    cache.set(
+        f"essay_job:{job_id}",
+        {"status": "pending", "drafts": [], "failed": []},
+        timeout=3600,
+    )
+
+    draft_essays_batch.delay(
+        job_id=job_id,
+        profile_id=profile.id,
+        prompts_list=prompts_list,
+        structured_context=structured_context,
+    )
+
+    return Response({"job_id": job_id, "status": "pending"}, status=202)
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_essay_draft_status(request, job_id: str):
+    result = cache.get(f"essay_job:{job_id}")
+    if result is None:
+        return Response({"error": "Job not found or expired."}, status=404)
+    return Response(result, status=200)
+
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def scholarship_metadata(request):
+    from scholarships.models import Tag, Level
+    return Response({
+        "tags": [
+            {"value": c[0], "label": c[1]}
+            for c in Tag._meta.get_field("name").choices
+        ],
+        "levels": [
+            {"value": c[0], "label": c[1]}
+            for c in Level._meta.get_field("level").choices
+        ],
+        "scholarship_types": [
+            "Merit-based", "Need-based", "Research", "Athletic",
+            "Community Service", "Field-specific", "Minority",
+            "Women in STEM", "International Student", "Regional",
+        ],
+    })
+
+
+# ── Context builders ──────────────────────────────────────────────────────────
+
+def _build_profile_context(user, profile) -> str:
+    """Hard profile facts — always the base."""
     return (
         f"Name: {profile.full_name or user.get_full_name() or 'Not provided'}\n"
         f"Field of Study: {profile.field_of_study or 'Not provided'}\n"
         f"Institution: {profile.institution or 'Not provided'}\n"
         f"Graduation Year: {profile.graduation_year or 'Not provided'}\n"
         f"Country: {profile.country or 'Not provided'}\n"
+        f"GPA: {profile.gpa or 'Not provided'}"
+        f"{f'/{profile.gpa_scale}' if profile.gpa_scale else ''}\n"
         f"Career Goals: {getattr(profile, 'career_goals', None) or 'Not provided'}\n"
     )
 
+
+def _build_rich_scholarship_context(scholarship_id: int) -> str:
+    """
+    Tier 1 — build from a full saved Scholarship record.
+    Uses all stored fields: description, eligibility, requirements, reward, deadline.
+    """
+    try:
+        s = Scholarship.objects.get(id=scholarship_id)
+    except Scholarship.DoesNotExist:
+        return ""
+
+    lines = ["\n--- Scholarship Details (verified, from your dashboard) ---"]
+
+    if s.title:
+        lines.append(f"Scholarship Name: {s.title}")
+    if s.description:
+        lines.append(f"About: {s.description}")
+    if s.reward:
+        lines.append(f"Award: {s.reward}")
+    if s.eligibility:
+        criteria = s.eligibility if isinstance(s.eligibility, list) else [s.eligibility]
+        lines.append(f"Eligibility: {'; '.join(str(c) for c in criteria)}")
+    if s.requirements:
+        reqs = s.requirements if isinstance(s.requirements, list) else [s.requirements]
+        lines.append(f"Requirements: {'; '.join(str(r) for r in reqs)}")
+    if s.end_date:
+        lines.append(f"Deadline: {s.end_date}")
+    if s.tags:
+        lines.append(f"Type: {', '.join(s.tags)}")
+    if s.levels:
+        lines.append(f"Academic Level: {', '.join(s.levels)}")
+
+    lines.append("--- End Scholarship Details ---\n")
+    return "\n".join(lines)
+
+
+def _build_inline_context_block(ctx: dict) -> str:
+    """
+    Tier 2 — user filled the inline popup form.
+    Clearly labelled as self-reported to reduce LLM hallucination risk.
+    """
+    lines = ["\n--- Scholarship Context (provided by applicant) ---"]
+    if name := (ctx.get("name") or "").strip():
+        lines.append(f"Scholarship Name: {name}")
+    if audience := (ctx.get("audience") or "").strip():
+        lines.append(f"Target Audience: {audience}")
+    if values := (ctx.get("values") or "").strip():
+        lines.append(f"What This Scholarship Values: {values}")
+    lines.append("--- End Scholarship Context ---\n")
+    return "\n".join(lines)
+
+
+def _build_page_metadata_block(meta: dict) -> str:
+    """
+    Tier 3 — page title and URL scraped from the active tab.
+    Minimum viable context: at least the LLM knows which scholarship page
+    the user is on, even when they skipped everything else.
+    """
+    lines = ["\n--- Application Page (inferred from browser tab) ---"]
+    if title := (meta.get("title") or "").strip():
+        lines.append(f"Page Title: {title}")
+    if url := (meta.get("url") or "").strip():
+        lines.append(f"URL: {url}")
+    lines.append(
+        "Note: No scholarship details were saved. Use the page title as a "
+        "hint about what scholarship this is for, but do not invent details.\n"
+        "--- End Application Page ---\n"
+    )
+    return "\n".join(lines)
