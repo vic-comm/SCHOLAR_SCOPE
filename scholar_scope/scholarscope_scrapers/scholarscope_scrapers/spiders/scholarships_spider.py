@@ -70,7 +70,9 @@ class ScholarshipBatchSpider(scrapy.Spider):
             raise ValueError("site_config_id is required!")
 
         self.site_config = SiteConfig.objects.get(id=site_config_id)
-        self.start_urls = [self.site_config.list_url]
+        from scholarships.models import ListingSource
+        self.sources = ListingSource.objects.filter(site=self.site_config, active=True)
+        self.start_urls = [source.url for source in self.sources]
         self.scrape_event_id = scrape_event_id
         self.max_items = int(max_items)
         self.scraped_count = 0
@@ -81,10 +83,11 @@ class ScholarshipBatchSpider(scrapy.Spider):
         parsed_base = urlparse(self.site_config.base_url)
         clean_domain = parsed_base.netloc.replace("www.", "")
         self.allowed_domains = [clean_domain, f"www.{clean_domain}"]
-
-        list_domain = urlparse(self.site_config.list_url).netloc.replace("www.", "")
-        if list_domain != clean_domain:
-            self.allowed_domains += [list_domain, f"www.{list_domain}"]
+        
+        for url in self.start_urls:
+            list_domain = urlparse(url).netloc.replace("www.", "")
+            if list_domain not in self.allowed_domains:
+                self.allowed_domains.extend([list_domain, f"www.{list_domain}"])
 
         self.logger.debug(f"Allowed domains: {self.allowed_domains}")
 
@@ -97,14 +100,15 @@ class ScholarshipBatchSpider(scrapy.Spider):
 
     def start_requests(self):
         self.logger.error("🔥 start_requests CALLED 🔥")
-        yield scrapy.Request(
-            self.start_urls[0],
-            meta={
-                "playwright": True,
-                "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded", "timeout": 60_000},
-            },
-            callback=self.parse_list,
-        )
+        for url in self.start_urls:
+            yield scrapy.Request(
+                url,
+                meta={
+                    "playwright": True,
+                    "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded", "timeout": 60_000},
+                },
+                callback=self.parse_list,
+            )
 
     async def parse_list(self, response):
         cfg = self.site_config
@@ -214,6 +218,9 @@ class ScholarshipBatchSpider(scrapy.Spider):
             item, ["title", "reward", "end_date", "description", "requirements", "eligibility"]
         )
 
+        if not item.get("reward"):
+            item["reward"] = "Amount not specified"
+
         if QualityCheck.should_full_regenerate(quality_report):
             self.logger.info(f"Full LLM extraction. Score: {quality_report['quality_score']}")
             recovered = await self.llm_engine.extract_data(response.text, response.url)
@@ -225,7 +232,7 @@ class ScholarshipBatchSpider(scrapy.Spider):
         elif quality_report["needs_llm"]:
             fields = list(set(
                 quality_report["failed_fields"]
-                + [f for f, _ in quality_report["low_confidence_fields"]]
+               + [f for f, _, _ in quality_report["low_confidence_fields"]]
             ))
             if fields:
                 self.logger.info(f"Partial LLM fix for: {fields}")
@@ -257,6 +264,9 @@ class ScholarshipBatchSpider(scrapy.Spider):
 
 def _parse_dates_inplace(data: dict) -> None:
     """Parse any string date values in 'end_date' / 'start_date' in-place."""
+    if not isinstance(data, dict):
+        return
+    
     for key in ("end_date", "start_date"):
         val = data.get(key)
         if isinstance(val, str):

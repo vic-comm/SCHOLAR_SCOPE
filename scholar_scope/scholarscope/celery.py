@@ -31,3 +31,44 @@ CELERY_TASK_ROUTES = {
     'scholarships.draft_essays_batch': {'queue': 'llm'},
     'scholarships.collect_essay_results': {'queue': 'llm'},
 }
+
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+
+    # ── Daily 7-day deadline reminder (runs every morning at 8am) ────────────
+    "deadline-reminder-7d": {
+        "task": "scholarships.send_deadline_reminders",
+        "schedule": crontab(hour=8, minute=0),
+        "kwargs": {"days_before": 7},
+    },
+
+    # ── Daily 3-day deadline reminder (urgent — runs at 9am) ─────────────────
+    "deadline-reminder-3d": {
+        "task": "scholarships.send_deadline_reminders",
+        "schedule": crontab(hour=9, minute=0),
+        "kwargs": {"days_before": 3},
+    },
+
+    # ── Weekly bulk digest (every Monday at 8am) ──────────────────────────────
+    # Catches any pending applications that didn't get a deadline nudge
+    "bulk-reminder-weekly": {
+        "task": "scholarships.send_bulk_reminders",
+        "schedule": crontab(hour=8, minute=0, day_of_week="monday"),
+    },
+
+    # ── Weekly renewal check (every Monday at 7am, before bulk digest) ───────
+    "renewal-notifications-weekly": {
+        "task": "scholarships.send_renewal_notifications",
+        "schedule": crontab(hour=7, minute=0, day_of_week="monday"),
+    },
+}
+
+
+
+
+
+
+
+
+

@@ -10,32 +10,49 @@ class SiteConfigSerializer(serializers.ModelSerializer):
 class ScholarshipSerializer(serializers.ModelSerializer):
     is_bookmarked = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
+    levels      = serializers.SerializerMethodField()
     tags = serializers.StringRelatedField(many=True, read_only=True)
     is_watched = serializers.SerializerMethodField()
 
     class Meta:
         model = Scholarship
-        fields = ['id','title','start_date','end_date','tags','description','reward','active','link', 'eligibility', 'is_bookmarked', 'is_saved', 'is_watched']
+        fields = ['id','title','start_date','end_date','tags','description','reward','active','link', 'eligibility', 'is_bookmarked', 'is_saved', 'is_watched', 'levels']
+    
+    def _user(self):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            return request.user
+        return None
+    def get_tags(self, obj):
+        return [{'id': t.id, 'name': t.name} for t in obj.tags.all()]
+
+    def get_levels(self, obj):
+        return [{'id': l.id, 'level': l.level} for l in obj.level.all()]
     
     def get_is_bookmarked(self, obj):
-        request = self.context['request']
-        if request.user.is_authenticated:
-            user = self.context['request'].user
-            return Bookmark.objects.filter(user=user, scholarship=obj).exists()
-        return False
-    
+        user = self._user()
+        if not user:
+            return False
+        # Use prefetched set if available (set up in get_queryset for performance)
+        if hasattr(obj, '_bookmarked_by_user'):
+            return obj._bookmarked_by_user
+        return Bookmark.objects.filter(user=user, scholarship=obj).exists()
+
     def get_is_saved(self, obj):
-        request = self.context['request']
-        if request.user.is_authenticated:
-            user = self.context['request'].user
-            return Application.objects.filter(user=user, scholarship=obj).exists()
-        return False
-    
+        user = self._user()
+        if not user:
+            return False
+        if hasattr(obj, '_saved_by_user'):
+            return obj._saved_by_user
+        return Application.objects.filter(user=user, scholarship=obj).exists()
+
     def get_is_watched(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return WatchedScholarship.objects.filter(user=request.user, scholarship=obj).exists()
-        return False
+        user = self._user()
+        if not user:
+            return False
+        if hasattr(obj, '_watched_by_user'):
+            return obj._watched_by_user
+        return WatchedScholarship.objects.filter(user=user, scholarship=obj).exists()
 
 class ApplicationSerializer(serializers.ModelSerializer):
     class Meta:

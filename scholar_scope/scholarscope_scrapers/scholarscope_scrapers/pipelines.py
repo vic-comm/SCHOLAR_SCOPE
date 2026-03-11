@@ -33,10 +33,13 @@ class ScholarshipPipeline:
             self.scrape_event = ScholarshipScrapeEvent.objects.get(id=spider.scrape_event_id)
             self.scrape_event.mark_retried()
         else:
-            source_name = getattr(spider, "source_name", spider.name)
-            source_url = getattr(spider, "list_url", None)
-            if not source_url and hasattr(spider, 'site_config'):
-                source_url = spider.site_config.list_url
+            if hasattr(spider, 'site_config'):
+                source_name = spider.site_config.name
+                source_url = spider.site_config.base_url 
+            else:
+                source_name = getattr(spider, "source_name", spider.name)
+                source_url = getattr(spider, "base_url", "Unknown URL")
+
             self.scrape_event = ScholarshipScrapeEvent.objects.create_scrape_event(
                 source_name=source_name,
                 source_url=source_url,
@@ -67,7 +70,8 @@ class ScholarshipPipeline:
         if deadline and deadline < timezone.now().date():
             raise DropItem(f"Expired scholarship: {title}")
 
-        await sync_to_async(self._save_scholarship)(adapter, spider.name)
+        site_name = spider.site_config.name if hasattr(spider, 'site_config') else spider.name
+        await sync_to_async(self._save_scholarship)(adapter, site_name)
         
         self.existing_fingerprints.add(fingerprint)
         self.items_created += 1

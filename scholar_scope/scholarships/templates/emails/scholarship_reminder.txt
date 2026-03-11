@@ -1,16 +1,39 @@
+ScholarScope — Scholarship Deadline Reminder
+============================================
+
 Hello {{ user_name }},
 
-Here are your pending scholarship applications:
+You have {{ scholarships|length }} pending scholarship application{{ scholarships|length|pluralize }} with upcoming deadlines. Here's where things stand:
 
 {% for s in scholarships %}
-- {{ s.title }}
-  Deadline: {{ s.deadline_date }} ({{ s.days_remaining }} days left)
-  Award: {{ s.award_amount }}
-  Applied on: {{ s.application_date }}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{{ s.title }}
+{% if s.days_remaining is not None %}  ⏰  {% if s.days_remaining == 0 %}DUE TODAY{% else %}{{ s.days_remaining }} DAYS REMAINING{% endif %}{% endif %}
+
+  Status:    Pending
+  Deadline:  {{ s.deadline_date }}
+  Award:     {{ s.award_amount }}
+  Applied:   {{ s.application_date }}
 
 {% endfor %}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Check your application status here: {{ dashboard_url }}
+View all your applications here:
+{{ dashboard_url }}
 
-Best regards,
-The Scholarship Team
+BEFORE YOU SUBMIT:
+→ Confirm all required documents are attached
+→ Re-read your personal statement
+→ Check the provider's website for last-minute changes
+→ Follow up with referees if you need recommendation letters
+
+Good luck,
+The ScholarScope Team
+
+---
+{{ organization_name }}{% if organization_address %} · {{ organization_address }}{% endif %}
+Sent to {{ user_email }} because you have active scholarship applications.
+
+Unsubscribe: {{ unsubscribe_url }}
+Contact: {{ contact_url }}
+Privacy Policy: {{ privacy_policy_url }}

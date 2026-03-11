@@ -1,0 +1,26 @@
+Hello {{ user_name }},
+
+Great news — the following scholarship{% if scholarships|length > 1 %}s{% endif %} you're watching {% if scholarships|length > 1 %}have{% else %}has{% endif %} reopened for a new application cycle:
+
+{% for s in scholarships %}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{{ s.title }}
+  Status:    Now Open
+  Deadline:  {{ s.deadline_date }}{% if s.days_remaining %} ({{ s.days_remaining }} days left){% endif %}
+  Award:     {{ s.award_amount }}
+{% if s.apply_url %}  Apply:     {{ s.apply_url }}{% endif %}
+
+{% endfor %}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+View your dashboard: {{ dashboard_url }}
+
+You're receiving this because you chose to be notified when this scholarship reopens.
+To stop receiving these notifications: {{ unsubscribe_url }}
+
+Best of luck,
+The ScholarScope Team
+
+{{ organization_name }}
+{{ organization_address }}
+Privacy Policy: {{ privacy_policy_url }} | Contact: {{ contact_url }}

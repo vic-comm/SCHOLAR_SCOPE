@@ -387,8 +387,6 @@ class ScrapeFailureLog(models.Model):
 class SiteConfig(models.Model):
     name = models.CharField(max_length=100)
     base_url = models.URLField()
-    list_url = models.URLField(help_text="The page containing scholarship listings")
-
     # CSS selectors used by the spider
     list_item_selector = models.CharField(max_length=255, help_text="Selector for each scholarship card")
     title_selector = models.CharField(max_length=255)
@@ -424,6 +422,14 @@ class SiteConfig(models.Model):
     def __str__(self):
         return self.name
 
+class ListingSource(models.Model):
+    site = models.ForeignKey(SiteConfig, on_delete=models.CASCADE, related_name='sources')
+    url = models.URLField(help_text="The specific category/listing URL (e.g., Undergraduate feed)")
+    category_name = models.CharField(max_length=100, blank=True, help_text="e.g., Masters, STEM, Africa")
+    active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.site.name} - {self.category_name or self.url}"
 
 class WatchedScholarship(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)

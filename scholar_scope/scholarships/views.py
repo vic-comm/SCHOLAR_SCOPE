@@ -33,6 +33,10 @@ import logging
 from urllib.parse import urlparse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from scholarships.pagination import ScholarshipCursorPagination
+from django.db.models import Exists, OuterRef
+from .pagination import ScholarshipCursorPagination
+from .models import Scholarship, Bookmark, WatchedScholarship
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +58,8 @@ class CustomSignUpView(SignupView):
     
 class ScholarshipViewset(viewsets.ModelViewSet):
     serializer_class = ScholarshipSerializer
-    
+    pagination_class   = ScholarshipCursorPagination
+
     def get_permissions(self):
         if self.action in ['list', 'retrieve', 'details']:
             return [AllowAny()] 
@@ -74,6 +79,26 @@ class ScholarshipViewset(viewsets.ModelViewSet):
         query = self.request.query_params.get("q")
         level = self.request.query_params.get("level")
         tag = self.request.query_params.get("tag")
+
+        user = self.request.user
+        if user and user.is_authenticated:
+            queryset = queryset.annotate(
+                _bookmarked_by_user=Exists(
+                    Bookmark.objects.filter(
+                        user=user, scholarship=OuterRef('pk')
+                    )
+                ),
+                _saved_by_user=Exists(
+                    Application.objects.filter(
+                        user=user, scholarship=OuterRef('pk')
+                    )
+                ),
+                _watched_by_user=Exists(
+                    WatchedScholarship.objects.filter(
+                        user=user, scholarship=OuterRef('pk')
+                    )
+                ),
+            )
 
         if level:
             queryset = queryset.filter(level__level__iexact=level)
