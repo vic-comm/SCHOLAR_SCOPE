@@ -9,12 +9,12 @@
     "default_title": "ScholarScope"
   },
 
-  "permissions": [
-    "activeTab",
-    "contextMenus",
-    "storage",
-    "scripting"
-  ],
+  "permissions": ["storage", "identity", "activeTab", "scripting", "contextMenus"],
+  
+  "oauth2": {
+    "client_id": "your-client-id-here.apps.googleusercontent.com",
+    "scopes": ["openid", "email", "profile"]
+  },
 
   "host_permissions": [
     "http://127.0.0.1:8000/*",

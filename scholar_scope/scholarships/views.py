@@ -37,9 +37,14 @@ from scholarships.pagination import ScholarshipCursorPagination
 from django.db.models import Exists, OuterRef
 from .pagination import ScholarshipCursorPagination
 from .models import Scholarship, Bookmark, WatchedScholarship
+from django.shortcuts import get_object_or_404, render
+from django.contrib.auth import get_user_model
+from django.core.signing import Signer, BadSignature
+from django.http import HttpResponseBadRequest
+from scholarships.authentication import OptionalJWTAuthentication
 
 logger = logging.getLogger(__name__)
-
+User = get_user_model()
 class GoogleOAuth2Client(OAuth2Client):
     def __init__(self, *args, **kwargs):
         if 'scope_delimiter' in kwargs:
@@ -58,7 +63,8 @@ class CustomSignUpView(SignupView):
     
 class ScholarshipViewset(viewsets.ModelViewSet):
     serializer_class = ScholarshipSerializer
-    pagination_class   = ScholarshipCursorPagination
+    pagination_class = ScholarshipCursorPagination
+    authentication_classes = [OptionalJWTAuthentication]
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve', 'details']:
@@ -68,11 +74,6 @@ class ScholarshipViewset(viewsets.ModelViewSet):
         else:
             return [IsAdminUser()]
         
-    def get_authenticators(self):
-        if self.request and self.request.method == 'GET':
-            return []
-        return super().get_authenticators()    
-    
     def get_queryset(self):
         queryset = Scholarship.objects.all()
 
@@ -390,7 +391,6 @@ class ScrapeSubmissionViewset(viewsets.ModelViewSet):
         title = data.get('title', '')
 
         # ── Fast path: scholarship already in DB ──────────────────────────────
-        # Check BEFORE creating a submission so we don't pollute the DB.
         existing_scholarship = Scholarship.objects.filter(link=link).first()
         if existing_scholarship:
             submission, _ = ScrapeSubmission.objects.get_or_create(
@@ -438,6 +438,11 @@ class ScrapeSubmissionViewset(viewsets.ModelViewSet):
             }
         )
 
+        if not created and submission.status in ['REJECTED', 'FAILED']:
+            submission.status = 'PENDING'
+            submission.raw_data = data 
+            submission.save()
+            
         if created or submission.status == 'PENDING':
             process_new_submission.delay(submission.id)
 
@@ -473,7 +478,6 @@ class ScrapeSubmissionViewset(viewsets.ModelViewSet):
             reason = sub.raw_data.get('rejection_reason', '')
             return Response({
                 "submission_status": "rejected",
-                # 'none' → "this page doesn't look like a scholarship" notice
                 "data_quality":      "none",
                 "rejection_reason":  reason,
                 "sparse_fields":     [],
@@ -484,7 +488,6 @@ class ScrapeSubmissionViewset(viewsets.ModelViewSet):
             return Response({
                 "submission_status": "approved",
                 "scholarship_id":    sub.scholarship.id,
-                # 'full' | 'sparse' — drives the frontend notice
                 "data_quality":      "sparse" if sparse_fields else "full",
                 "sparse_fields":     sparse_fields,
             })
@@ -691,7 +694,9 @@ def regenerate_essay(request):
 
     except Exception as exc:
         logger.exception(f"regenerate_essay: failed for user {user.id}: {exc}")
-        return Response({"error": "Regeneration failed. Please try again."}, status=500)
+        return Response(
+        {"error": "AI is currently busy or rate-limited. Please wait a minute and try again."}, 
+        status=status.HTTP_429_TOO_MANY_REQUESTS)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1009,3 +1014,16 @@ def _build_page_metadata_block(meta: dict) -> str:
         "--- End Application Page ---\n"
     )
     return "\n".join(lines)
+
+def unsubscribe_view(request, token):
+    signer = Signer()
+    try:
+        user_id = signer.unsign(token)
+    except BadSignature:
+        return HttpResponseBadRequest("Invalid or tampered unsubscribe link.")
+        
+    user = get_object_or_404(User, id=user_id)
+    user.receives_email_reminders = False
+    user.save()
+    
+    return render(request, "emails/unsubscribed_success.html")

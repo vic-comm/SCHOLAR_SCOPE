@@ -8,6 +8,7 @@ urlpatterns = [path('scholarships/extract_from_text/', views.extract_from_html, 
                path('scholarships/draft_essays/status/<str:job_id>/', views.get_essay_draft_status, name='draft_essays_status'),
                path('scholarships/metadata/', views.scholarship_metadata, name='metadata'),
                path("scholarships/check/",views.check_scholarship, name="check_scholarship"),
+               path('unsubscribe/<str:token>/', views.unsubscribe_view, name='unsubscribe'),
 
 ]
 routers = DefaultRouter()

@@ -1,200 +1,389 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scholarship Reopened</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Scholarship Reopened — ScholarScope</title>
     <style>
-        body, table, td, p, a, li, blockquote {
-            -webkit-text-size-adjust: 100%;
-            -ms-text-size-adjust: 100%;
-        }
-        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-        img { border: 0; height: auto; outline: none; text-decoration: none; }
+        body, table, td, p, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
 
         body {
             margin: 0 !important;
             padding: 0 !important;
-            background-color: #0f172a;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f2f2f0;
+            font-family: 'Georgia', 'Times New Roman', serif;
         }
-        .email-container {
-            max-width: 600px;
+
+        .wrapper { width: 100%; background-color: #f2f2f0; padding: 40px 16px; }
+
+        .container {
+            max-width: 580px;
             margin: 0 auto;
-            background-color: #1e293b;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        }
-
-        /* ── Header — green/teal to visually distinguish from deadline reminders */
-        .header {
-            background: linear-gradient(135deg, #059669 0%, #0d9488 100%);
-            padding: 30px 20px;
-            text-align: center;
-        }
-        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: 600; }
-        .header p  { color: #a7f3d0; margin: 10px 0 0 0; font-size: 16px; }
-
-        .content  { padding: 40px 30px; }
-        .greeting { font-size: 18px; color: #e2e8f0; margin-bottom: 20px; line-height: 1.5; }
-
-        /* ── Scholarship card — green left-border to match header ── */
-        .scholarship-card {
-            background-color: #334155;
-            border: 1px solid #475569;
-            border-radius: 8px;
-            padding: 25px;
-            margin: 25px 0;
-            position: relative;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-        .scholarship-card::before {
-            content: '';
-            position: absolute;
-            left: 0; top: 0; bottom: 0;
-            width: 4px;
-            background: linear-gradient(135deg, #059669 0%, #0d9488 100%);
+            background-color: #ffffff;
             border-radius: 2px;
+            overflow: hidden;
+            border: 1px solid #e0e0dc;
         }
 
-        .scholarship-title { font-size: 20px; font-weight: 600; color: #f1f5f9; margin: 0 0 15px 0; }
-        .scholarship-details { margin: 15px 0; }
-        .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #475569; }
-        .detail-row:last-child { border-bottom: none; }
-        .detail-label { font-weight: 600; color: #94a3b8; flex: 1; }
-        .detail-value { color: #e2e8f0; flex: 2; text-align: right; }
-
-        .status-open {
-            background-color: #064e3b;
-            color: #6ee7b7;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
+        /* ── Header — black bar, green accent ───────────────── */
+        .header {
+            background-color: #111111;
+            padding: 28px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header-wordmark {
+            font-family: 'Georgia', serif;
+            font-size: 15px;
+            letter-spacing: 0.18em;
             text-transform: uppercase;
-            border: 1px solid #065f46;
+            color: #ffffff;
+            margin: 0;
+            font-weight: normal;
+        }
+        .header-wordmark span { color: #22c55e; }
+
+        .header-tag {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: #22c55e;
+            border: 1px solid #1a5c32;
+            border-radius: 2px;
+            padding: 4px 9px;
+            white-space: nowrap;
+        }
+        .header-tag::before { content: '● '; }
+
+        /* ── Hero — white bg, black type, green underline ───── */
+        .hero {
+            background-color: #ffffff;
+            padding: 44px 40px 36px;
+            border-bottom: 3px solid #111111;
+            position: relative;
         }
 
-        /* ── Renewal callout — green instead of red ── */
-        .renewal-callout {
-            background-color: #064e3b;
-            border: 1px solid #059669;
-            border-radius: 6px;
-            padding: 15px;
-            margin: 20px 0;
-            text-align: center;
+        .hero-kicker {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: #22c55e;
+            margin: 0 0 16px 0;
+            display: block;
         }
-        .renewal-callout .icon { font-size: 24px; margin-bottom: 8px; }
-        .renewal-callout p { margin: 0; font-weight: 600; color: #6ee7b7; }
 
-        .cta-section { text-align: center; margin: 30px 0; }
-        .cta-button {
+        .hero-headline {
+            font-family: 'Georgia', serif;
+            font-size: 38px;
+            line-height: 1.08;
+            font-weight: normal;
+            color: #111111;
+            margin: 0 0 16px 0;
+            letter-spacing: -0.04em;
+        }
+        .hero-headline em {
+            font-style: italic;
+            color: #16a34a;
+        }
+
+        .hero-rule {
+            width: 32px;
+            height: 3px;
+            background-color: #22c55e;
+            margin: 0 0 16px 0;
+            border: none;
+        }
+
+        .hero-sub {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #888884;
+            margin: 0;
+            letter-spacing: 0.08em;
+        }
+
+        /* ── Content ─────────────────────────────────────────── */
+        .content { padding: 36px 40px; background-color: #ffffff; }
+
+        .intro {
+            font-size: 14px;
+            color: #444440;
+            line-height: 1.75;
+            margin: 0 0 32px 0;
+            padding-bottom: 28px;
+            border-bottom: 1px solid #e8e8e4;
+        }
+        .intro strong { color: #111111; }
+
+        .overline {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: #aaaaaa;
+            margin: 0 0 16px 0;
+        }
+
+        /* ── Scholarship entry ───────────────────────────────── */
+        .scholarship-entry {
+            margin: 0 0 16px 0;
+            border: 1px solid #e0e0dc;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        /* Green top stripe — the only prominent green on the card */
+        .entry-stripe { height: 3px; background-color: #22c55e; }
+
+        .entry-header {
+            background-color: #f9f9f7;
+            padding: 16px 22px;
+            border-bottom: 1px solid #e8e8e4;
+        }
+
+        .now-open {
             display: inline-block;
-            background: linear-gradient(135deg, #059669 0%, #0d9488 100%);
+            font-family: 'Courier New', monospace;
+            font-size: 8px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-weight: bold;
+            color: #16a34a;
+            background-color: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 2px;
+            padding: 3px 8px;
+            margin-bottom: 10px;
+        }
+        .now-open::before { content: '● '; }
+
+        .entry-title {
+            font-family: 'Georgia', serif;
+            font-size: 16px;
+            color: #111111;
+            font-weight: normal;
+            margin: 0;
+            line-height: 1.35;
+            letter-spacing: -0.01em;
+        }
+
+        .entry-body { padding: 16px 22px; background-color: #ffffff; }
+
+        /* Days counter — black pill, green number */
+        .days-counter {
+            background-color: #111111;
+            border-radius: 2px;
+            padding: 10px 16px;
+            margin-bottom: 16px;
+            display: inline-flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+        .days-number {
+            font-family: 'Courier New', monospace;
+            font-size: 28px;
+            font-weight: bold;
+            color: #22c55e;
+            line-height: 1;
+            letter-spacing: -0.02em;
+        }
+        .days-label {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #666660;
+        }
+
+        /* Meta rows */
+        .meta-row { padding: 8px 0; border-bottom: 1px solid #f0f0ec; }
+        .meta-row:last-child { border-bottom: none; }
+        .meta-key {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #aaaaaa;
+            display: block;
+            margin-bottom: 2px;
+        }
+        .meta-val { font-size: 13px; color: #333330; }
+        .meta-val strong { color: #111111; }
+        .meta-val a { color: #16a34a; text-decoration: none; }
+
+        /* ── CTA — black button ──────────────────────────────── */
+        .cta-section { text-align: center; padding: 32px 0 8px; }
+        .cta-btn {
+            display: inline-block;
+            background-color: #111111;
             color: #ffffff !important;
             text-decoration: none;
-            padding: 15px 30px;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 16px;
-            box-shadow: 0 2px 4px rgba(5, 150, 105, 0.3);
+            padding: 14px 38px;
+            border-radius: 2px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+        .cta-note {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            color: #aaaaaa;
+            text-align: center;
+            margin: 10px 0 0 0;
+            letter-spacing: 0.08em;
         }
 
-        .footer { background-color: #0f172a; color: #94a3b8; text-align: center; padding: 25px; font-size: 14px; }
-        .footer a { color: #60a5fa; text-decoration: none; }
-        .footer p { margin: 5px 0; }
+        .rule { border: none; border-top: 1px solid #e8e8e4; margin: 28px 0; }
+
+        .signoff { font-size: 13px; color: #666660; line-height: 1.7; margin: 0; }
+        .signoff strong { color: #111111; }
+
+        /* ── Footer — dark, echoes header ───────────────────── */
+        .footer {
+            background-color: #111111;
+            padding: 24px 40px;
+            text-align: center;
+        }
+        .footer-nav { margin: 0 0 10px 0; }
+        .footer-nav a {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #555550;
+            text-decoration: none;
+        }
+        .footer-nav a:hover { color: #22c55e; }
+        .footer-dot { color: #333330; margin: 0 8px; }
+        .footer-copy {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            color: #444440;
+            line-height: 1.65;
+            margin: 0;
+            letter-spacing: 0.04em;
+        }
 
         @media only screen and (max-width: 600px) {
-            .email-container { margin: 10px; border-radius: 4px; }
-            .content { padding: 25px 20px; }
-            .scholarship-card { padding: 20px 15px; }
-            .detail-row { flex-direction: column; gap: 5px; }
-            .detail-value { text-align: left; }
-            .header h1 { font-size: 24px; }
+            .wrapper { padding: 20px 8px; }
+            .header { padding: 22px 24px; flex-direction: column; align-items: flex-start; gap: 12px; }
+            .hero { padding: 32px 24px 28px; }
+            .hero-headline { font-size: 28px; }
+            .content { padding: 28px 24px; }
+            .footer { padding: 20px 24px; }
+            .days-counter { display: inline-flex; }
         }
     </style>
 </head>
 <body>
-<div class="email-container">
+<div class="wrapper">
+<div class="container">
 
+    <!-- Header -->
     <div class="header">
-        <h1>🎓 New Cycle Open!</h1>
-        <p>A scholarship you're watching has reopened</p>
+        <p class="header-wordmark">Scholar<span>Scope</span></p>
+        <span class="header-tag">New Cycle Open</span>
     </div>
 
+    <!-- Hero -->
+    <div class="hero">
+        <span class="hero-kicker">Scholarship Alert</span>
+        <h1 class="hero-headline">
+            It's back.<br>
+            <em>Go get it.</em>
+        </h1>
+        <div class="hero-rule"></div>
+        <p class="hero-sub">
+            {{ scholarships|length }} scholarship{% if scholarships|length > 1 %}s{% endif %} you watched {% if scholarships|length > 1 %}have{% else %}has{% endif %} reopened for applications
+        </p>
+    </div>
+
+    <!-- Content -->
     <div class="content">
-        <div class="greeting">
-            <strong>Hello {{ user_name }},</strong><br>
-            Great news — the following scholarship{% if scholarships|length > 1 %}s{% endif %}
-            you're watching {% if scholarships|length > 1 %}have{% else %}has{% endif %} reopened
-            for a new application cycle:
-        </div>
+
+        <p class="intro">
+            <strong>Hello {{ user_name }},</strong><br><br>
+            You asked us to let you know when {% if scholarships|length > 1 %}these reopened{% else %}this reopened{% endif %}.
+            The new application cycle {% if scholarships|length > 1 %}are{% else %}is{% endif %} now live —
+            the deadline won't wait.
+        </p>
+
+        <p class="overline">
+            {% if scholarships|length > 1 %}Reopened ({{ scholarships|length }}){% else %}Reopened Scholarship{% endif %}
+        </p>
 
         {% for s in scholarships %}
-        <div class="scholarship-card">
-            <h2 class="scholarship-title">{{ s.title }}</h2>
+        <div class="scholarship-entry">
+            <div class="entry-stripe"></div>
+            <div class="entry-header">
+                <span class="now-open">Now Open</span>
+                <h2 class="entry-title">{{ s.title }}</h2>
+            </div>
+            <div class="entry-body">
 
-            <div class="scholarship-details">
-                <div class="detail-row">
-                    <span class="detail-label">Status:</span>
-                    <span class="detail-value"><span class="status-open">Now Open</span></span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Application Deadline:</span>
-                    <span class="detail-value"><strong>{{ s.deadline_date }}</strong></span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Award Amount:</span>
-                    <span class="detail-value"><strong>{{ s.award_amount }}</strong></span>
-                </div>
-                {% if s.apply_url %}
-                <div class="detail-row">
-                    <span class="detail-label">Apply Directly:</span>
-                    <span class="detail-value">
-                        <a href="{{ s.apply_url }}" style="color: #6ee7b7;">Official Page →</a>
-                    </span>
+                {% if s.days_remaining %}
+                <div class="days-counter">
+                    <span class="days-number">{{ s.days_remaining }}</span>
+                    <span class="days-label">days to apply</span>
                 </div>
                 {% endif %}
-            </div>
 
-            {% if s.days_remaining %}
-            <div class="renewal-callout">
-                <div class="icon">📅</div>
-                <p>{{ s.days_remaining }} days remaining to apply</p>
+                <div class="meta-row">
+                    <span class="meta-key">Deadline</span>
+                    <span class="meta-val"><strong>{{ s.deadline_date }}</strong></span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-key">Award</span>
+                    <span class="meta-val">{{ s.award_amount }}</span>
+                </div>
+                {% if s.apply_url %}
+                <div class="meta-row">
+                    <span class="meta-key">Apply</span>
+                    <span class="meta-val"><a href="{{ s.apply_url }}">Official page →</a></span>
+                </div>
+                {% endif %}
+
             </div>
-            {% endif %}
         </div>
         {% endfor %}
 
         <div class="cta-section">
-            <a href="{{ dashboard_url }}" class="cta-button">Go to Dashboard</a>
+            <a href="{{ dashboard_url }}" class="cta-btn">Open Dashboard</a>
+            <p class="cta-note">Track, apply, and manage all your scholarships</p>
         </div>
 
-        <p style="color: #cbd5e1; line-height: 1.6; margin-top: 30px;">
-            You're receiving this because you chose to be notified when this scholarship reopens.
-            Good luck with your application!
-        </p>
+        <hr class="rule">
 
-        <p style="color: #cbd5e1; margin-top: 20px;">
-            Best of luck,<br>
+        <p class="signoff">
+            You're getting this because you watched {% if scholarships|length > 1 %}these scholarships{% else %}this scholarship{% endif %} on ScholarScope.
+            You can unsubscribe any time using the link below.<br><br>
             <strong>The ScholarScope Team</strong>
         </p>
     </div>
 
+    <!-- Footer -->
     <div class="footer">
-        <p><strong>{{ organization_name }}</strong></p>
-        <p>{{ organization_address }}</p>
-        <p>
-            <a href="{{ unsubscribe_url }}">Unsubscribe</a> |
-            <a href="{{ contact_url }}">Contact Us</a> |
-            <a href="{{ privacy_policy_url }}">Privacy Policy</a>
+        <p class="footer-nav">
+            <a href="{{ unsubscribe_url }}">Unsubscribe</a>
+            <span class="footer-dot">·</span>
+            <a href="{{ contact_url }}">Contact</a>
+            <span class="footer-dot">·</span>
+            <a href="{{ privacy_policy_url }}">Privacy</a>
         </p>
-        <p style="margin-top: 15px; font-size: 12px; color: #94a3b8;">
-            This email was sent to {{ user_email }} because you are watching this scholarship on ScholarScope.
+        <p class="footer-copy">
+            {{ organization_name }}{% if organization_address %} · {{ organization_address }}{% endif %}<br>
+            Sent to {{ user_email }}
         </p>
     </div>
 
+</div>
 </div>
 </body>
 </html>

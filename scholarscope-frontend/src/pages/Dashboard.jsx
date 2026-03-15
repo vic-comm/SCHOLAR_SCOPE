@@ -49,7 +49,10 @@ const Dashboard = () => {
         ...prev,
         stats: {
           ...prev.stats,
-          total_applications: Math.max(0, (prev.stats.total_applications || 0) - 1)
+          total_applications: Math.max(0, (prev.stats.total_applications || 0) - 1),
+          upcoming_deadlines: prev.upcoming_deadlines?.filter(
+            scholarship => scholarship.id !== id
+        )
         }
       };
     });

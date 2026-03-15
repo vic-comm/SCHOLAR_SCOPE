@@ -87,7 +87,7 @@ function AppInner() {
   const {
     essayStatus, essayStep, essayError,
     initiateDrafting, resetEssay,
-  } = useEssayDrafter({ getToken, reviewModal });
+  } = useEssayDrafter({ getToken, reviewModal, onLogout });
 
   const [formData, setFormData] = useState({
     title: '', link: '', description: '',

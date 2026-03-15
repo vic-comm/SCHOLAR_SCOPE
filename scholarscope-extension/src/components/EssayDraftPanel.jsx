@@ -14,7 +14,8 @@ const pollForResults = async (jobId, token, onProgress, maxAttempts = 40) => {
       );
       if (res.data.status === 'complete') return res.data;
       if (res.data.status === 'failed')   throw new Error('Job failed on server.');
-      onProgress(`Drafting essays… (${attempt + 1}/${maxAttempts})`);
+      const percent = Math.round(((attempt + 1) / maxAttempts) * 100);
+      onProgress(`Drafting essays… (${percent}%)`);
     } catch (err) {
       if (err.message === 'Job failed on server.') throw err;
       if (attempt === maxAttempts - 1) throw err;
@@ -63,7 +64,7 @@ export async function injectApprovedDrafts(approvedDrafts) {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 import { useState } from 'react';
 
-export function useEssayDrafter({ getToken, reviewModal }) {
+export function useEssayDrafter({ getToken, reviewModal, onLogout }) {
   const [essayStatus, setEssayStatus] = useState('idle');
   const [essayStep,   setEssayStep]   = useState('');
   const [essayError,  setEssayError]  = useState('');
@@ -73,6 +74,9 @@ export function useEssayDrafter({ getToken, reviewModal }) {
     if (!token) {
       setEssayStatus('error');
       setEssayError('You are not signed in.');
+      setTimeout(() => {
+      if (onLogout) onLogout(); 
+    }, 1500);
       return;
     }
 

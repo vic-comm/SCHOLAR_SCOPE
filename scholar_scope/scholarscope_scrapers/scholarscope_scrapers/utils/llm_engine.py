@@ -307,7 +307,14 @@ class LLMEngine:
         try:
             response = await generate_text(prompt=user_prompt, max_words=max_words)
 
-            revised = response.text.strip()
+            if isinstance(response, str):
+                if "429" in response or "Quota exceeded" in response:
+                    raise Exception("AI quota exceeded. Please try again in a minute.")
+                
+                revised = response.strip()
+                
+            else:
+                revised = response.text.strip()
             return {
                 "draft":      revised,
                 "word_count": len(revised.split()),

@@ -16,6 +16,7 @@ class User(AbstractUser):
     is_admin = models.BooleanField(default=False)
     bookmarked_scholarships = models.ManyToManyField('Scholarship', through='Bookmark', related_name='bookmarked_by')
     email = models.EmailField(unique=True)
+    receives_email_reminders = models.BooleanField(default=True)
 
 class Tag(models.Model):
     name = models.CharField(

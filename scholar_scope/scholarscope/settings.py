@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'django_celery_results',
     'widget_tweaks',
     'django_htmx',
+    'anymail',
     'scholarships.apps.ScholarshipsConfig',
     'pgvector',
     'tailwind',
@@ -280,7 +281,7 @@ REDIS_URL = config("REDIS_URL")
 AUTH_USER_MODEL = 'scholarships.User'
 
 # 1. Login with Email (No Username)
-ACCOUNT_AUTHENTICATION_METHOD = 'email' 
+ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_EMAIL_REQUIRED = True           
 ACCOUNT_UNIQUE_EMAIL = True             
 ACCOUNT_USERNAME_REQUIRED = False       
@@ -309,40 +310,23 @@ CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BEAT_SCHEDULER='django_celery_beat.schedulers.DatabaseScheduler'
 SOCIALACCOUNT_AUTO_SIGNUP = True
-# if DEBUG:
-#     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-#     EMAIL_HOST = 'smtp.gmail.com'
-#     EMAIL_HOST_USER = config('EMAIL_ADDRESS')
-#     EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-#     EMAIL_PORT = 587
-#     EMAIL_USE_TLS = True
-#     DEFAULT_FROM_EMAIL = F"SCHOLARSCOPE {config('EMAIL_ADDRESS')}"
-#     ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
-# else:
-#     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
-# if DEBUG:
-#     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-#     DEFAULT_FROM_EMAIL = f"SCHOLARSCOPE <{config('EMAIL_ADDRESS')}>"
-#     ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
-# else:
-#     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-#     EMAIL_HOST = 'smtp.gmail.com'
-#     EMAIL_HOST_USER = config('EMAIL_ADDRESS')
-#     EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-#     EMAIL_PORT = 587
-#     EMAIL_USE_TLS = True
-#     DEFAULT_FROM_EMAIL = f"SCHOLARSCOPE <{config('EMAIL_ADDRESS')}>"
-#     ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
+ANYMAIL = {
+  "MAILTRAP_API_TOKEN": config("MAIL_TRAP_TOKEN"),
+}
+EMAIL_BACKEND = "anymail.backends.mailtrap.EmailBackend"
+DEFAULT_FROM_EMAIL = "hello@demomailtrap.co"
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_HOST_USER = config('EMAIL_ADDRESS')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-DEFAULT_FROM_EMAIL = f"SCHOLARSCOPE <{config('EMAIL_ADDRESS')}>"
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
+
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
+# EMAIL_HOST_USER = config('EMAIL_ADDRESS')
+# EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# DEFAULT_FROM_EMAIL = f"SCHOLARSCOPE <{config('EMAIL_ADDRESS')}>"
 GOOGLE_OAUTH_CALLBACK_URL=config('GOOGLE_OAUTH_CALLBACK_URL')
 SITE_ID = 1
 

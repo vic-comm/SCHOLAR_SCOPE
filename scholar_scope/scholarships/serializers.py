@@ -57,7 +57,7 @@ class ScholarshipSerializer(serializers.ModelSerializer):
 class ApplicationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Application
-        fields = ['user', 'status', 'notes', 'scholarship', 'submitted_at']
+        fields = ['user', 'status', 'notes', 'scholarship', 'submitted_at', 'id']
 
     def create(self, validated_data):
         user = self.context['request'].user

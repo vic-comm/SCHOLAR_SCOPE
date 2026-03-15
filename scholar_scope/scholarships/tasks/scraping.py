@@ -2,7 +2,6 @@ import sys
 import os
 import multiprocessing 
 from celery import shared_task
-from scrapy.crawler import CrawlerProcess
 from django.utils import timezone
 from datetime import timedelta
 from django.core.mail import send_mail
@@ -211,8 +210,21 @@ def process_new_submission(submission_id):
             print(f"Submission {sub.id}: Mostly good, recovering fields: {quality_report['failed_fields']}")
             recovered_data = async_to_sync(llm_engine.recover_specific_fields)(
                 text_for_llm, 
-                fields_to_fix=quality_report['failed_fields']
+                quality_report['failed_fields']
             )
+            if isinstance(recovered_data, str):
+                import json
+                try:
+                    # Strip out markdown formatting if the LLM added it
+                    clean_str = recovered_data.replace('```json', '').replace('```', '').strip()
+                    recovered_data = json.loads(clean_str)
+                except json.JSONDecodeError:
+                    print(f"Submission {sub.id}: Failed to parse LLM JSON. Raw output: {recovered_data}")
+                    recovered_data = {} # Default to empty so it doesn't crash
+
+            if not isinstance(recovered_data, dict):
+                recovered_data = {}
+
             ai_data = {**working_data, **recovered_data}
             is_valid_scholarship = True
             
@@ -251,7 +263,7 @@ def process_new_submission(submission_id):
             scholarship.level.clear() 
             for lvl_name in levels_list:
                 if lvl_name:
-                    level_obj, _ = Level.objects.get_or_create(name=str(lvl_name).strip().title())
+                    level_obj, _ = Level.objects.get_or_create(level=str(lvl_name).strip().title())
                     scholarship.level.add(level_obj)
 
             scholarship.tags.clear() 
