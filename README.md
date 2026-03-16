@@ -9,7 +9,7 @@
 
 AI-powered scholarship discovery and application management platform. ScholarScope combines an LLM-assisted scraping pipeline, a Chrome extension, and a distributed task queue to surface relevant scholarships and generate personalised application essays from a student's profile.
 
-> 🎥 **[Watch the Demo →](https://tinyurl.com/scholarscope)** &nbsp;·&nbsp 🌐 **[Live App →](#)**
+> 🎥 **[Watch the Demo](https://tinyurl.com/scholarscope)** 🌐 **[Live App →](#)**
 
 ---
 
