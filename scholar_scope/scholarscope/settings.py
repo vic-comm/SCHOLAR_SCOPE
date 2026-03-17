@@ -35,6 +35,7 @@ ALLOWED_HOSTS = [
     '.onrender.com', 
     'localhost',
     '127.0.0.1',
+    '::',
 ]
 
 # Application definition
@@ -220,22 +221,24 @@ USE_TZ = True
 # settings.py
 
 STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# This prevents the "Directory does not exist" warning on Render
-STATIC_DIR = BASE_DIR / "static"
-if STATIC_DIR.exists():
+# Use an absolute path for STATIC_ROOT
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+
+# Ensure STATIC_DIR points to your source files
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+
+if os.path.exists(STATIC_DIR):
     STATICFILES_DIRS = [STATIC_DIR]
 else:
     STATICFILES_DIRS = []
 
-# Updated for Django 5.2 compatibility
+# Using WhiteNoise for production assets
 STORAGES = {
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
-
 MEDIA_URL= 'media/'
 MEDIA_ROOT= BASE_DIR / 'media'
 
@@ -298,6 +301,7 @@ if REDIS_URL.startswith('rediss://'):
     CELERY_REDIS_BACKEND_USE_SSL = {
         'ssl_cert_reqs': ssl.CERT_NONE,
     }
+
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BEAT_SCHEDULER='django_celery_beat.schedulers.DatabaseScheduler'
 SOCIALACCOUNT_AUTO_SIGNUP = True
@@ -310,14 +314,6 @@ DEFAULT_FROM_EMAIL = "hello@demomailtrap.co"
 
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
 
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
-# EMAIL_HOST_USER = config('EMAIL_ADDRESS')
-# EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# DEFAULT_FROM_EMAIL = f"SCHOLARSCOPE <{config('EMAIL_ADDRESS')}>"
 GOOGLE_OAUTH_CALLBACK_URL=config('GOOGLE_OAUTH_CALLBACK_URL')
 SITE_ID = 1
 
