@@ -13,4 +13,4 @@ celery -A scholarscope worker -l info --concurrency=2 &
 
 # 4. Start Gunicorn and replace the shell process (exec)
 echo "Starting Gunicorn..."
-exec gunicorn scholarscope.wsgi:application --bind 0.0.0.0:$PORT
+exec gunicorn scholarscope.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2
