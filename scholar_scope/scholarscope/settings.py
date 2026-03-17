@@ -29,7 +29,7 @@ sys.path.append(SCRAPERS_DIR)
 SECRET_KEY = config('DJANGO_SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=False, cast=bool)
-
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 ALLOWED_HOSTS = [
     'scholarscope-api.onrender.com',
     '.onrender.com', 
@@ -57,7 +57,6 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
-    'django_celery_beat',
     'django_celery_results',
     'widget_tweaks',
     'django_htmx',
@@ -208,15 +207,34 @@ USE_I18N = True
 
 USE_TZ = True
 
+# STATIC_URL = "/static/"
+
+# STATICFILES_DIRS = [
+#     BASE_DIR / "static",  
+# ]
+
+# STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# settings.py
+
 STATIC_URL = "/static/"
-
-STATICFILES_DIRS = [
-    BASE_DIR / "static",  
-]
-
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# This prevents the "Directory does not exist" warning on Render
+STATIC_DIR = BASE_DIR / "static"
+if STATIC_DIR.exists():
+    STATICFILES_DIRS = [STATIC_DIR]
+else:
+    STATICFILES_DIRS = []
+
+# Updated for Django 5.2 compatibility
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 MEDIA_URL= 'media/'
 MEDIA_ROOT= BASE_DIR / 'media'
