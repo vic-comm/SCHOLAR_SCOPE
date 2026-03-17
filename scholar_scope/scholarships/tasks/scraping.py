@@ -83,55 +83,6 @@ def finalize_scrape_event(results, scrape_event_id):
         event.mark_partial("Some scholarships failed — see FailedScholarship table")
     return "Scrape event completed"
 
-@shared_task
-def send_weekly_renewal_notifications():
-    from scholarships.models import WatchedScholarship, Scholarship
-    seven_days_ago = timezone.now() - timedelta(days=7)
-    
-    renewed_scholarships = Scholarship.objects.filter(
-        status='active',
-        is_recurring=True,
-        last_renewed_at__gte=seven_days_ago
-    )
-    
-    if not renewed_scholarships.exists():
-        return "No renewals this week."
-
-    print(f"Processing notifications for {renewed_scholarships.count()} renewed scholarships...")
-
-    emails_sent = 0
-    
-    for scholarship in renewed_scholarships:
-        current_year = timezone.now().year
-        watchers = WatchedScholarship.objects.filter(
-            scholarship=scholarship
-        ).exclude(notified_for_year__year=current_year).select_related('user')
-        
-        for watch in watchers:
-            user = watch.user
-            if not user.email: continue
-            
-            subject = f"Action Required: {scholarship.title} is Open!"
-            message = (
-                f"Hello {user.first_name},\n\n"
-                f"The scholarship you are tracking, '{scholarship.title}', "
-                f"has reopened for the new cycle.\n\n"
-                f"Deadline: {scholarship.latest_deadline}\n"
-                f"Apply: {scholarship.link}\n\n"
-                f"Good luck!"
-            )
-            
-            try:
-                send_mail(subject, message, 'noreply@scholarscope.com', [user.email])
-                
-                watch.notified_for_year = timezone.now()
-                watch.notified_for_year = current_year
-                watch.save()
-                emails_sent += 1
-            except Exception as e:
-                print(f"Error emailing user {user.id}: {e}")
-
-    return f"Sent {emails_sent} renewal notifications."
 
 @shared_task
 def process_new_submission(submission_id):
@@ -197,6 +148,18 @@ def process_new_submission(submission_id):
             # Note: Using async_to_sync because LLMEngine is typically asynchronous
             ai_result = async_to_sync(llm_engine.extract_data)(text_for_llm, sub.link)
             
+            if isinstance(ai_result, str):
+                import json
+                try:
+                    # Strip out markdown formatting if the LLM added it
+                    clean_str = ai_result.replace('```json', '').replace('```', '').strip()
+                    ai_result = json.loads(clean_str)
+                except json.JSONDecodeError:
+                    print(f"Submission {sub.id}: Failed to parse LLM JSON. Raw output: {ai_result}")
+                    ai_result = [] 
+            if isinstance(ai_result, dict):
+                ai_result = [ai_result]
+
             if isinstance(ai_result, list) and len(ai_result) > 0:
                 ai_data = ai_result[0]
                 is_valid_scholarship = True
@@ -281,7 +244,7 @@ def process_new_submission(submission_id):
             sub.raw_data = ai_data 
             
             sub.save()
-            
+              
             # Ensure it shows up on the user's board
             Application.objects.get_or_create(
                 user=sub.user, 

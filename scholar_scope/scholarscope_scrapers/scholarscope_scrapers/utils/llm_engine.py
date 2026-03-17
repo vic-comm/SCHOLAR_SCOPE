@@ -5,7 +5,6 @@ import trafilatura
 import ollama
 import google.generativeai as genai
 from scholarships.models import ProfileChunk
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from asgiref.sync import sync_to_async
 from dotenv import load_dotenv
 import logging

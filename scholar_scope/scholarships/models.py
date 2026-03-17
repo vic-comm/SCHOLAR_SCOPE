@@ -62,7 +62,7 @@ class Scholarship(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     fingerprint = models.CharField(max_length=1000, null=True, blank=True)
     slug = models.SlugField(null=True, blank=True, max_length=1000)
-    embedding = VectorField(dimensions=384, null=True, blank=True)
+    embedding = VectorField(dimensions=768, null=True, blank=True)
     scraped_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
     is_recurring = models.BooleanField(default=False, help_text="True if this scholarship reopens annually.")
     last_renewed_at = models.DateTimeField(null=True, blank=True,help_text="The last time we detected a new cycle for this item.")
@@ -229,7 +229,7 @@ class Profile(models.Model):
     profile_picture = models.ImageField(upload_to="profiles/", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    embedding = VectorField(dimensions=384, null=True, blank=True)
+    embedding = VectorField(dimensions=768, null=True, blank=True)
     bio = models.TextField(
         blank=True,
         help_text="Short personal summary (2-3 sentences). Shown publicly."

@@ -1,6 +1,4 @@
 from celery import shared_task
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 from celery.utils.log import get_task_logger
 
 logger = get_task_logger(__name__)
@@ -24,12 +22,15 @@ def outdated_scholarships():
 def batch_invalidate_user_recommendations(user_ids):
     from django.core.cache import cache
     from scholarships.utils import _rec_cache_key
+    
     for uid in user_ids:
         cache.delete(_rec_cache_key(uid))
 
 @shared_task
 def remove_semantic_duplicates(threshold=0.95):
     from scholarships.models import Scholarship
+    from sklearn.metrics.pairwise import cosine_similarity
+    import numpy as np
     print("Starting Semantic Deduplication...")
     scholarships = list(Scholarship.objects.filter(
         active=True, 

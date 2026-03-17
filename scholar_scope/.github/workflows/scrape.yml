@@ -1,0 +1,61 @@
+name: Scheduled Tasks (Scraping & Emails)
+
+on:
+  schedule:
+    # 1. Run daily maintenance (emails, outdated checks) every day at 08:00 UTC
+    - cron: '0 8 * * *'
+    # 2. Run the heavy Playwright scraper and deduplication every Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      task_name:
+        description: 'Task to run (all, reminders, deadlines, renewals, outdated, deduplicate, scrape)'
+        required: true
+        default: 'all'
+
+jobs:
+  run-django-commands:
+    runs-on: ubuntu-latest
+    
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      MAIL_TRAP_TOKEN: ${{ secrets.MAIL_TRAP_TOKEN }}
+      DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+      DEBUG: 'False'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install scrapy-playwright playwright numpy scikit-learn 
+          playwright install chromium --with-deps
+
+      - name: Run Daily Maintenance (If triggered by daily cron)
+        if: github.event.schedule == '0 8 * * *'
+        run: |
+          python manage.py run_scheduled_tasks reminders
+          python manage.py run_scheduled_tasks deadlines
+          python manage.py run_scheduled_tasks renewals
+          python manage.py run_scheduled_tasks outdated
+
+      - name: Run Weekly Heavy Compute (If triggered by weekly cron)
+        if: github.event.schedule == '0 0 * * 0'
+        run: |
+          python manage.py run_scheduled_tasks scrape
+          python manage.py run_scheduled_tasks deduplicate
+
+      - name: Run Manual Task (If triggered manually via UI)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          python manage.py run_scheduled_tasks ${{ github.event.inputs.task_name }}

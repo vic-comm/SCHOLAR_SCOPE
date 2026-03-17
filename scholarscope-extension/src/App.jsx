@@ -83,11 +83,17 @@ function AppInner() {
   // 'none' | 'sparse' | null — tracks what auto-extract found
   const [extractNotice,      setExtractNotice]      = useState(null);
 
+  const logout = useCallback(() => {
+    chrome.storage.local.remove('auth_token');
+    setIsAuthenticated(false);
+  }, []);
+
+
   const reviewModal = useReviewModal();
   const {
     essayStatus, essayStep, essayError,
     initiateDrafting, resetEssay,
-  } = useEssayDrafter({ getToken, reviewModal, onLogout });
+  } = useEssayDrafter({ getToken, reviewModal, onLogout:logout });
 
   const [formData, setFormData] = useState({
     title: '', link: '', description: '',
@@ -187,10 +193,6 @@ function AppInner() {
     }, 200);
   }, [reviewModal]);
 
-  const logout = useCallback(() => {
-    chrome.storage.local.remove('auth_token');
-    setIsAuthenticated(false);
-  }, []);
 
   const clearDraft = useCallback(() => {
     chrome.storage.local.remove('draft');
@@ -379,7 +381,7 @@ function AppInner() {
       </header>
 
       {/* ── Auto-extract section ── */}
-      <div className="ai-section">
+      {/* <div className="ai-section">
         <button onClick={handleAutoExtract} disabled={isBusy} className="ai-btn">
           {status === 'extracting'
             ? <><Loader2 size={16} className="spin" /><span>{extractStep}</span></>
@@ -389,10 +391,76 @@ function AppInner() {
         {status === 'extracting' && (
           <div className="progress-bar"><div className="progress-fill" /></div>
         )}
+      </div> */}
+
+      {/* ── Auto-extract button ── */}
+      <div className="ai-section">
+        <button onClick={handleAutoExtract} disabled={isBusy} className="ai-btn">
+          {status === 'extracting'
+            ? <><Loader2 size={15} className="spin" /><span>Extracting…</span></>
+            : <><Sparkles size={15} /><span>Auto-Extract with AI</span></>
+          }
+        </button>
       </div>
+ 
+      {/* ── Extracting progress — shown below button while running ── */}
+      {status === 'extracting' && (
+        <div className="extract-progress" style={{ margin: '0 14px 2px' }}>
+          <div className="extract-progress__row">
+            <div className="extract-progress__spinner" />
+            <span className="extract-progress__label">Working on it…</span>
+          </div>
+          <div className="extract-progress__bar">
+            <div className="extract-progress__fill" />
+          </div>
+          <span className="extract-progress__step">{extractStep}</span>
+        </div>
+      )}
+ 
+      {/* ── Page not recognised ── */}
+      {extractNotice === 'none' && (
+        <div className="extract-notice extract-notice--warn">
+          <AlertCircle size={13} />
+          <div>
+            <p className="extract-notice__title">Page not recognised</p>
+            <p className="extract-notice__sub">
+              Navigate to the scholarship's detail or application page and try again,
+              or fill in the form below.
+            </p>
+          </div>
+          <button className="extract-notice__dismiss" onClick={() => setExtractNotice(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
+ 
+      {/* ── Saved but sparse ── */}
+      {extractNotice?.type === 'sparse' && (
+        <div className="extract-notice extract-notice--info">
+          <Info size={13} />
+          <div>
+            <p className="extract-notice__title">Saved — a few fields are missing</p>
+            <p className="extract-notice__sub">
+              {extractNotice.fields?.length > 0 ? (
+                <>
+                  Couldn't find:{' '}
+                  {extractNotice.fields.map((f, i) => (
+                    <span key={i}>
+                      <span className="extract-notice__field">{f}</span>
+                      {i < extractNotice.fields.length - 1 ? ' ' : ''}
+                    </span>
+                  ))}
+                  . Add these below for better essay drafts.
+                </>
+              ) : (
+                'Check the form below and fill in any missing details.'
+              )}
+            </p>
+          </div>
+          <button className="extract-notice__dismiss" onClick={() => setExtractNotice(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
 
       {/* ── Extract notices — driven by data_quality from backend ── */}
-      {extractNotice === 'none' && (
+      {/* {extractNotice === 'none' && (
         <div className="extract-notice extract-notice--warn">
           <Info size={13} />
           <div>
@@ -419,7 +487,7 @@ function AppInner() {
           </div>
           <button className="extract-notice__dismiss" onClick={() => setExtractNotice(null)}>✕</button>
         </div>
-      )}
+      )} */}
 
       {/* ── Essay panel ── */}
       <EssayDraftPanel
@@ -453,10 +521,24 @@ function AppInner() {
         <div className="divider-line" />
       </div>
 
-      {status === 'error' && (
+      {/* {status === 'error' && (
         <div className="status-error">
           <AlertCircle size={14} />
           <span>{errorMessage}</span>
+        </div>
+      )} */}
+
+      {status === 'error' && (
+        <div className="error-banner">
+          <div className="error-banner__inner">
+            <div className="error-banner__icon">
+              <AlertCircle size={13} />
+            </div>
+            <div>
+              <p className="error-banner__title">Something went wrong</p>
+              <p className="error-banner__msg">{errorMessage}</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -519,26 +601,35 @@ function AppInner() {
   );
 }
 
-function CenterLoader() {
+function SuccessScreen({ onClose }) {
   return (
-    <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:480, background:'#f5f4f0' }}>
-      <Loader2 size={24} className="spin" style={{ color:'#2248d4' }} />
+    <div className="success-screen">
+      <div className="success-screen__top">
+        <div className="success-screen__pulse">
+          <div className="success-screen__ring" />
+          <CheckCircle className="success-screen__icon" size={26} />
+        </div>
+        <h2 className="success-screen__title">Saved!</h2>
+        <p className="success-screen__sub">
+          Scholarship added to your dashboard.
+        </p>
+      </div>
+      <button onClick={onClose} className="success-screen__btn">Done</button>
     </div>
   );
 }
 
-function SuccessScreen({ onClose }) {
+function CenterLoader() {
   return (
-    <div className="center-screen">
-      <div className="success-ring">
-        <CheckCircle className="success-icon" />
+    <div className="center-loader">
+      <div className="center-loader__ring">
+        <Loader2 size={18} className="spin" />
       </div>
-      <h2 className="success-title">Saved!</h2>
-      <p className="success-sub">Scholarship added to your dashboard.</p>
-      <button onClick={onClose} className="close-btn">Close</button>
+      <span className="center-loader__label">ScholarScope</span>
     </div>
   );
 }
+
 
 export default function App() {
   return (

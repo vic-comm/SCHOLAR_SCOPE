@@ -1,4 +1,4 @@
-from .scraping import scrape_site, scrape_all_sources, process_new_submission
+from .scraping import scrape_site, scrape_all_sources, process_new_submission, _run_spider_process, finalize_scrape_event
 from .embeddings import generate_scholarship_embedding, embed_profile_chunks, generate_profile_embedding
 from .notifications import send_email_reminder, send_weekly_renewal_notifications, send_deadline_reminder
 from .llm import draft_single_essay, draft_essays_batch, collect_essay_results

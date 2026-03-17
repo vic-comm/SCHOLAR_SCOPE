@@ -5,7 +5,6 @@ import hashlib
 from django.conf import settings
 from django.core.mail import send_mail
 from django.core.cache import cache 
-import numpy as np
 from django.db.models import Count, Q
 from django.utils.timezone import now
 from pgvector.django import CosineDistance
@@ -23,10 +22,8 @@ import os
 import json
 logger = logging.getLogger(__name__)
 
+
 TOP_K_CHUNKS = 3
-import dateparser
-import trafilatura
-from parsel import Selector  
 EMBEDDING_CACHE_TTL = 7 * 24 * 3600  
 RECOMMENDATION_CACHE_TTL = 60 * 60 
 _embedder = None
@@ -34,15 +31,37 @@ _embedder = None
 def _rec_cache_key(user_id: int) -> str:
     return f"user_recommendations:{user_id}"
 
+class MockNumpyArray(list):
+    """Magic trick to mimic a numpy array's .tolist() method."""
+    def tolist(self): return self
 
+class GeminiEmbedder:
+    def __init__(self, model_name="models/text-embedding-004"):
+        import google.generativeai as genai
+        self.model_name = model_name
+        genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+    def encode(self, text: str, **kwargs):
+        import google.generativeai as genai
+        result = genai.embed_content(
+            model=self.model_name,
+            content=text
+        )
+        return MockNumpyArray(result['embedding'])
+    
 def invalidate_user_recommendations(user_id: int) -> None:
     cache.delete(_rec_cache_key(user_id))
 
 def get_embedder():
+    """
+    Returns a singleton instance of the configured remote embedder.
+    Controlled by the EMBEDDING_PROVIDER environment variable.
+    """
     global _embedder
     if _embedder is None:
-        from sentence_transformers import SentenceTransformer
-        _embedder = SentenceTransformer('all-MiniLM-L6-v2', device='cpu', model_kwargs={'low_cpu_mem_usage': False})
+        logger.info("Initializing Gemini API Embedder (768 dimensions)")
+        _embedder = GeminiEmbedder()
+            
     return _embedder
 
 def build_profile_text(profile) -> str:
@@ -140,7 +159,7 @@ def _ensure_clients_configured():
     global _gemini_configured, _openrouter_client, _groq_client
     
     if not _gemini_configured:
-        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"), transport='rest')
         _gemini_configured = True
 
     if _openrouter_client is None:

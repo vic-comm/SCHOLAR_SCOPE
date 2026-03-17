@@ -272,7 +272,7 @@ class UserViewset(viewsets.ViewSet):
         recent_bookmarks = Bookmark.objects.filter(
             user=user
         ).select_related('scholarship').order_by('-bookmarked_at')
-        personal_scrapes = ScrapeSubmission.objects.filter(user=user, status='APPROVED').order_by('-created_at')
+        personal_scrapes = ScrapeSubmission.objects.filter(user=user).exclude(status='APPROVED').order_by('-created_at')
         recent_apps = []
         for app in recent_applications:
             app_dict = ApplicationSerializer(app, context={'request': request}).data

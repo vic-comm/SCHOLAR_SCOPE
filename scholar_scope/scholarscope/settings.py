@@ -157,31 +157,23 @@ WSGI_APPLICATION = "scholarscope.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.sqlite3",
-#         "NAME": BASE_DIR / "db.sqlite3",
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'scholar_scope_db',
+#         'USER': 'chidera',  
+#         'PASSWORD': '',     
+#         'HOST': 'localhost',
+#         'PORT': '5432',
 #     }
 # }
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'scholar_scope_db',
-        'USER': 'chidera',  # Your mac username
-        'PASSWORD': '',     # Often empty for local brew install
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
-}
 import dj_database_url
-# DATABASES['default'] = dj_database_url.parse(config('DATABASE_URL'))
-
-# DATABASES = {
-#     "default": dj_database_url.parse(
-#         config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
-#         conn_max_age=600,
-#         ssl_require=True
-#     )
-#     }
+DATABASES = {
+    'default': dj_database_url.config(
+        default=config('DATABASE_URL', default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
+}
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -212,23 +204,10 @@ USE_I18N = True
 
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
-
-# STATIC_URL = "static/"
-# STATIC_FILES = [ BASE_DIR / 'static']
-# STATICFILES_DIRS = [
-#     BASE_DIR / "static",
-# ]
-# STATIC_ROOT = BASE_DIR / 'staticfiles'
-# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
 STATIC_URL = "/static/"
 
 STATICFILES_DIRS = [
-    BASE_DIR / "static",   # project-level static
-    BASE_DIR / "theme" / "static_src",
+    BASE_DIR / "static",  
 ]
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -258,25 +237,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # }
 
 
-REDIS_URL = config("REDIS_URL")
-
-# SOCIALACCOUNT_LOGIN_ON_GET = True
-# SOCIALACCOUNT_AUTO_SIGNUP = True
-# SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
-# ACCOUNT_SIGNUP_REDIRECT_URL = '/' 
-# ACCOUNT_EMAIL_VERIFICATION = "none"
-# SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
-# SOCIALACCOUNT_QUERY_EMAIL = True
-# ACCOUNT_UNIQUE_EMAIL = True
-# SOCIALACCOUNT_AUTO_SIGNUP = True
-# ACCOUNT_EMAIL_REQUIRED = True
-# ACCOUNT_AUTHENTICATION_METHOD = "email"
-# ACCOUNT_USERNAME_REQUIRED = False
-# # ACCOUNT_EMAIL_REQUIRED = True
-# ACCOUNT_EMAIL_VERIFICATION = "optional"
-# ACCOUNT_CONFIRM_EMAIL_ON_GET = True
-# SOCIALACCOUNT_ADAPTER="scholarscope.adapters.MySocialAccountAdapter"
-
 # --- Authentication Settings ---
 AUTH_USER_MODEL = 'scholarships.User'
 
@@ -304,9 +264,18 @@ SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_QUERY_EMAIL = True
 SOCIALACCOUNT_LOGIN_ON_GET = True
 
+REDIS_URL = config("REDIS_URL")
 
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
+import ssl
+if REDIS_URL.startswith('rediss://'):
+    CELERY_BROKER_USE_SSL = {
+        'ssl_cert_reqs': ssl.CERT_NONE,
+    }
+    CELERY_REDIS_BACKEND_USE_SSL = {
+        'ssl_cert_reqs': ssl.CERT_NONE,
+    }
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BEAT_SCHEDULER='django_celery_beat.schedulers.DatabaseScheduler'
 SOCIALACCOUNT_AUTO_SIGNUP = True
@@ -333,7 +302,7 @@ SITE_ID = 1
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL,  # DB 1
+        "LOCATION": REDIS_URL, 
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
              
@@ -344,15 +313,12 @@ CACHES = {
 
 SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
 
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:5173",
-#     "http://127.0.0.1:5173",
-# ]
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_ALL_ORIGINS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
-    "chrome-extension://ojkebjiebipjbjfpakippnkklhdddbpf" # <-- Your exact extension ID
+    "chrome-extension://ojkebjiebipjbjfpakippnkklhdddbpf",
+    "https://*.onrender.com",
 ]
