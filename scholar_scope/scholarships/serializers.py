@@ -82,7 +82,7 @@ class ScrapeSubmissionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ScrapeSubmission
-        fields = ['id', 'title', 'link', 'verification_status', 'created_at', 'scholarship_details', 'reward', 'deadline', "application_status"]
+        fields = ['id', 'title', 'link', 'status', 'created_at', 'scholarship_details', 'reward', 'deadline', "application_status"]
 
     def get_reward(self, obj):
         return obj.raw_data.get('reward', 'N/A')
