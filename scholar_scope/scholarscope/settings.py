@@ -330,7 +330,7 @@ CACHES = {
 
 
 SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
-FRONTEND_URL = "https://scholar-scope-phi.vercel.app/"
+FRONTEND_URL = "https://scholar-scope-phi.vercel.app"
 # settings.py
 
 
