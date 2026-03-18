@@ -330,13 +330,26 @@ CACHES = {
 
 
 SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
+FRONTEND_URL = "https://scholar-scope-phi.vercel.app/"
+# settings.py
+
+
+# 2. ADD your exact frontend URLs here:
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",       # Local React/Next.js
+    "http://localhost:5173",       # Local Vite
+    "chrome-extension://ojkebjiebipjbjfpakippnkklhdddbpf", # Your Extension
+    FRONTEND_URL, # <-- ADD YOUR DEPLOYED FRONTEND HERE
+]
 
 CORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOW_ALL_ORIGINS = True
-
+# 3. ADD the frontend URL to CSRF trusted origins so POST requests work:
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
+    "http://localhost:5173",
+    "http://localhost:3000",
     "chrome-extension://ojkebjiebipjbjfpakippnkklhdddbpf",
-    'https://scholarscope-api.onrender.com',
+    "https://scholarscope-api.onrender.com",
+    FRONTEND_URL,
 ]
