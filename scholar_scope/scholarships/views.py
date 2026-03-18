@@ -42,6 +42,7 @@ from django.contrib.auth import get_user_model
 from django.core.signing import Signer, BadSignature
 from django.http import HttpResponseBadRequest
 from scholarships.authentication import OptionalJWTAuthentication
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -535,7 +536,7 @@ def _sparse_scholarship_fields(scholarship) -> list:
         sparse.append('deadline')
     return sparse
 
-
+@extend_schema(request=dict, responses={201: dict, 400: dict, 500: dict})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def extract_from_html(request):
@@ -631,6 +632,7 @@ def _normalise_url(raw: str) -> str:
     parsed = urlparse(raw)
     return parsed._replace(fragment="").geturl().rstrip("/")
 
+@extend_schema(request=dict, responses={200: dict, 400: dict, 429: dict})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def regenerate_essay(request):
@@ -713,7 +715,13 @@ def get_essay_draft_status(request, job_id: str):
 
     return Response(result, status=200)
 
-
+@extend_schema(
+    parameters=[
+        OpenApiParameter(name="title", type=OpenApiTypes.STR, location=OpenApiParameter.QUERY),
+        OpenApiParameter(name="url", type=OpenApiTypes.STR, location=OpenApiParameter.QUERY),
+    ],
+    responses={200: dict}
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def check_scholarship(request):
@@ -808,7 +816,7 @@ def _normalise_url(raw: str) -> str:
     return parsed._replace(query="", fragment="").geturl().rstrip("/")
 
 
-
+@extend_schema(request=dict, responses={202: dict, 400: dict, 404: dict})
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def start_essay_draft(request):
@@ -898,7 +906,10 @@ def start_essay_draft(request):
     return Response({"job_id": job_id, "status": "pending"}, status=202)
 
 
-
+@extend_schema(
+    parameters=[OpenApiParameter(name="job_id", type=OpenApiTypes.STR, location=OpenApiParameter.PATH)],
+    responses={200: dict, 404: dict}
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_essay_draft_status(request, job_id: str):
@@ -908,7 +919,7 @@ def get_essay_draft_status(request, job_id: str):
     return Response(result, status=200)
 
 
-
+@extend_schema(responses={200: dict})
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def scholarship_metadata(request):

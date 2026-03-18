@@ -23,13 +23,13 @@ class ScholarshipSerializer(serializers.ModelSerializer):
         if request and hasattr(request, 'user') and request.user.is_authenticated:
             return request.user
         return None
-    def get_tags(self, obj):
+    def get_tags(self, obj) -> list:
         return [{'id': t.id, 'name': t.name} for t in obj.tags.all()]
 
-    def get_levels(self, obj):
+    def get_levels(self, obj) -> list:
         return [{'id': l.id, 'level': l.level} for l in obj.level.all()]
     
-    def get_is_bookmarked(self, obj):
+    def get_is_bookmarked(self, obj) -> bool:
         user = self._user()
         if not user:
             return False
@@ -38,7 +38,7 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             return obj._bookmarked_by_user
         return Bookmark.objects.filter(user=user, scholarship=obj).exists()
 
-    def get_is_saved(self, obj):
+    def get_is_saved(self, obj) -> bool:
         user = self._user()
         if not user:
             return False
@@ -46,7 +46,7 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             return obj._saved_by_user
         return Application.objects.filter(user=user, scholarship=obj).exists()
 
-    def get_is_watched(self, obj):
+    def get_is_watched(self, obj) -> bool:
         user = self._user()
         if not user:
             return False
