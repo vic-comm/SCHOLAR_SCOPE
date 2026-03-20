@@ -36,7 +36,7 @@ export default function Login() {
 
  function handleGoogleLogin() {
     const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-    const REDIRECT_URI = "http://localhost:5173/google/callback"; 
+    const REDIRECT_URI = `${window.location.origin}/google/callback`; 
     
     const params = {
       response_type: 'code',
