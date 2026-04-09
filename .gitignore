@@ -205,3 +205,4 @@ __marimo__/
 .streamlit/secrets.toml.env
 .env
 venv/
+.env # or wherever your root .gitignore is
