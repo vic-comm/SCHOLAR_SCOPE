@@ -44,6 +44,7 @@ jobs:
       - name: Run Daily Maintenance (If triggered by daily cron)
         if: github.event.schedule == '0 8 * * *'
         run: |
+          cd scholar_scope
           python manage.py run_scheduled_tasks reminders
           python manage.py run_scheduled_tasks deadlines
           python manage.py run_scheduled_tasks renewals
@@ -52,10 +53,12 @@ jobs:
       - name: Run Weekly Heavy Compute (If triggered by weekly cron)
         if: github.event.schedule == '0 0 * * 0'
         run: |
+          cd scholar_scope
           python manage.py run_scheduled_tasks scrape
           python manage.py run_scheduled_tasks deduplicate
 
       - name: Run Manual Task (If triggered manually via UI)
         if: github.event_name == 'workflow_dispatch'
         run: |
+          cd scholar_scope
           python manage.py run_scheduled_tasks ${{ github.event.inputs.task_name }}
