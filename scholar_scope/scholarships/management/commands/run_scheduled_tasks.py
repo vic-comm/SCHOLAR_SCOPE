@@ -54,7 +54,8 @@ class Command(BaseCommand):
             self.stdout.write('Starting Scrapy spiders...')
             from scholarships.models import SiteConfig
             from scholarships.tasks import _run_spider_process
-            
+            from django.db import connection
+
             sources = SiteConfig.objects.filter(active=True)
             for site in sources:
                 p = multiprocessing.Process(
@@ -69,5 +70,6 @@ class Command(BaseCommand):
                 else:
                     # Update timestamp on success since we aren't using the scrape_site task wrapper
                     site.last_scraped = timezone.now()
+                    connection.close()
                     site.save(update_fields=["last_scraped"])
                     self.stdout.write(self.style.SUCCESS(f'Successfully scraped: {site.name}'))
