@@ -28,7 +28,9 @@ class ScholarshipPipeline:
 
     def open_spider(self, spider):
         os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
-        
+        from django.db import connection
+        connection.ensure_connection()
+
         if getattr(spider, "scrape_event_id", None):
             self.scrape_event = ScholarshipScrapeEvent.objects.get(id=spider.scrape_event_id)
             self.scrape_event.mark_retried()
@@ -49,6 +51,7 @@ class ScholarshipPipeline:
 
     
     async def process_item(self, item, spider):
+        from django.db import connection, OperationalError
         adapter = ItemAdapter(item)
         title = adapter.get("title")
         link = adapter.get("link")
@@ -71,7 +74,11 @@ class ScholarshipPipeline:
             raise DropItem(f"Expired scholarship: {title}")
 
         site_name = spider.site_config.name if hasattr(spider, 'site_config') else spider.name
-        await sync_to_async(self._save_scholarship)(adapter, site_name)
+        try:
+            self._save_scholarship(adapter, site_name)
+        except OperationalError:
+            connection.close()
+            self._save_scholarship(item, spider)
         
         self.existing_fingerprints.add(fingerprint)
         self.items_created += 1

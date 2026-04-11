@@ -20,6 +20,9 @@ def _run_spider_process(site_config_id, scrape_event_id):
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'scholarscope.settings')
         django.setup()
 
+        from django.db import connections
+        connections.close_all()
+        
         # 1. Import Scrapy's settings manager
         from scrapy.utils.project import get_project_settings
         from scrapy.crawler import CrawlerProcess
