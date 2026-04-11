@@ -105,12 +105,18 @@ class ScholarshipBatchSpider(scrapy.Spider):
                 url,
                 meta={
                     "playwright": True,
-                    "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded", "timeout": 60_000},
+                    "playwright_page_goto_kwargs": {"wait_until": "networkidle", "timeout": 60_000},
                 },
                 callback=self.parse_list,
             )
 
     async def parse_list(self, response):
+        if response.status == 403:
+            self.logger.warning(f"Blocked (403) — skipping: {response.url}")
+            return
+        if response.status == 202:
+            self.logger.warning(f"Got 202 (still processing) — page may not be fully rendered: {response.url}")
+
         cfg = self.site_config
         current_page = response.meta.get("page_number", 1)
         MAX_PAGES = 2
@@ -180,7 +186,7 @@ class ScholarshipBatchSpider(scrapy.Spider):
                     callback=self.parse_list,
                     meta={
                         "playwright": True,
-                        "playwright_page_goto_kwargs": {"wait_until": "commit", "timeout": 90_000},
+                        "playwright_page_goto_kwargs": {"wait_until": "networkidle", "timeout": 90_000},
                         "page_number": current_page + 1,
                     },
                 )

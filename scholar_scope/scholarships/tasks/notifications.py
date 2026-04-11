@@ -15,7 +15,7 @@ def send_email_reminder(self):
     """
     Send one digest email per user listing all their pending applications.
     Triggered by Celery Beat on a schedule (e.g. every morning at 8am).
-    """
+    """ 
     from scholarships.services import ScholarshipEmailService
     try:
         success, total = ScholarshipEmailService.send_bulk_reminders()
