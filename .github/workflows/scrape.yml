@@ -24,6 +24,8 @@ jobs:
       MAIL_TRAP_TOKEN: ${{ secrets.MAIL_TRAP_TOKEN }}
       DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
       GOOGLE_OAUTH_CALLBACK_URL: "http://localhost:8000/callback"
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}          
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       DEBUG: 'False'
 
     steps:
