@@ -10,6 +10,7 @@ setup_django()
 from scholarships.models import SiteConfig, Scholarship
 from scholarships.utils import generate_fingerprint
 from scholarships.utils import ScholarshipExtractor
+from scrapy_playwright.page import PageMethod
 
 def should_abort_request(request):
     """
@@ -106,6 +107,9 @@ class ScholarshipBatchSpider(scrapy.Spider):
                 meta={
                     "playwright": True,
                     "playwright_page_goto_kwargs": {"wait_until": "networkidle", "timeout": 60_000},
+                    "playwright_page_methods": [
+                    PageMethod("wait_for_timeout", 5000),
+                ],
                 },
                 callback=self.parse_list,
             )
