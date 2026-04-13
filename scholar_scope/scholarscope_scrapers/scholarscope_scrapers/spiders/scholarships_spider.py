@@ -108,7 +108,7 @@ class ScholarshipBatchSpider(scrapy.Spider):
                     "playwright": True,
                     "playwright_page_goto_kwargs": {"wait_until": "networkidle", "timeout": 60_000},
                     "playwright_page_methods": [
-                    PageMethod("wait_for_timeout", 5000),
+                    PageMethod("wait_for_selector", "p.td-module-title a", timeout=10000),
                 ],
                 },
                 callback=self.parse_list,
