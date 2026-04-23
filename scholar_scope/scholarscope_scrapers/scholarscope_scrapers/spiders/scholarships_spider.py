@@ -11,6 +11,7 @@ from scholarships.models import SiteConfig, Scholarship
 from scholarships.utils import generate_fingerprint
 from scholarships.utils import ScholarshipExtractor
 from scrapy_playwright.page import PageMethod
+import json
 
 def should_abort_request(request):
     """
@@ -122,7 +123,7 @@ class ScholarshipBatchSpider(scrapy.Spider):
             if page:
                 self.logger.warning(f"Timeout waiting for selector on {failure.request.url}. Closing page.")
                 await page.close()
-                
+
     async def parse_list(self, response):
         if response.status == 403:
             self.logger.warning(f"Blocked (403) — skipping: {response.url}")
@@ -259,6 +260,12 @@ class ScholarshipBatchSpider(scrapy.Spider):
                     extractor.clean_text, fields
                 )
                 _parse_dates_inplace(recovered)
+                if isinstance(recovered, str):
+                    try:
+                        recovered = json.loads(recovered)
+                    except json.JSONDecodeError:
+                        self.logger.error("Failed to parse LLM response as JSON")
+                        recovered = {}
                 item.update(recovered)
 
         # ── defaults / guard rails ────────────────────────────────────────────
