@@ -12,7 +12,7 @@ from scholarships.utils import generate_fingerprint
 from scholarships.utils import ScholarshipExtractor
 from scrapy_playwright.page import PageMethod
 import json
-from playwright_stealth import stealth_async
+from playwright_stealth import apply_stealth_async
 import os
 
 SCRAPERAPI_KEY = os.environ.get("SCRAPERAPI_KEY", "")
@@ -160,7 +160,7 @@ class ScholarshipBatchSpider(scrapy.Spider):
         )
     
     async def init_page(self, page, request):
-        await stealth_async(page)
+        await apply_stealth_async(page)
 
     def start_requests(self):
         self.logger.error("🔥 start_requests CALLED 🔥")
