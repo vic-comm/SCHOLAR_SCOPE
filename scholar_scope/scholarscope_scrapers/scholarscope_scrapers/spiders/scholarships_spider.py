@@ -108,12 +108,21 @@ class ScholarshipBatchSpider(scrapy.Spider):
                     "playwright": True,
                     "playwright_page_goto_kwargs": {"wait_until": "networkidle", "timeout": 60_000},
                     "playwright_page_methods": [
-                    PageMethod("wait_for_selector", "p.td-module-title a", timeout=10000),
+                    PageMethod("wait_for_selector", "p.td-module-title a",state="attached", timeout=10000),
                 ],
                 },
                 callback=self.parse_list,
+                errback=self.errback_close_page,
             )
 
+    async def errback_close_page(self, failure):
+        from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+        if failure.check(PlaywrightTimeoutError):
+            page = failure.request.meta.get("playwright_page")
+            if page:
+                self.logger.warning(f"Timeout waiting for selector on {failure.request.url}. Closing page.")
+                await page.close()
+                
     async def parse_list(self, response):
         if response.status == 403:
             self.logger.warning(f"Blocked (403) — skipping: {response.url}")
