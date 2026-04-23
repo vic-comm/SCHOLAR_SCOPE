@@ -235,9 +235,15 @@ def _rec_cache_key(user_id: int) -> str:
 def get_cached_recommendations(user, top_n=20):
     from scholarships.models import Scholarship
     key = _rec_cache_key(user.id)
-    cached = cache.get(key)
-    if cached:
-        return cached["results"]
+    try:
+        cached = cache.get(key)
+        if cached:
+            return cached["results"]
+    except:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Redis cache unavailable for recommendations: {e}")
+        return []
 
     # 2. Get User Profile
     profile = getattr(user, "profile", None)
