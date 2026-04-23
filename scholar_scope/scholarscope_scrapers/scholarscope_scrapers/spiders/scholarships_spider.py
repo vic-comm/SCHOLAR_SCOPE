@@ -12,7 +12,6 @@ from scholarships.utils import generate_fingerprint
 from scholarships.utils import ScholarshipExtractor
 from scrapy_playwright.page import PageMethod
 import json
-from playwright_stealth import apply_stealth_async
 import os
 
 SCRAPERAPI_KEY = os.environ.get("SCRAPERAPI_KEY", "")
@@ -159,8 +158,6 @@ class ScholarshipBatchSpider(scrapy.Spider):
             callback=callback,
         )
     
-    async def init_page(self, page, request):
-        await apply_stealth_async(page)
 
     def start_requests(self):
         self.logger.error("🔥 start_requests CALLED 🔥")
@@ -169,7 +166,6 @@ class ScholarshipBatchSpider(scrapy.Spider):
                 url,
                 meta={
                     "playwright": True,
-                    "playwright_page_init_callback": self.init_page,
                     "playwright_page_goto_kwargs": {"wait_until": "networkidle", "timeout": 60_000},
                     "playwright_page_methods": [
                     PageMethod("wait_for_selector", "p.td-module-title a",state="attached", timeout=10000),
