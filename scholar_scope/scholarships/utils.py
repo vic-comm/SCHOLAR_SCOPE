@@ -239,7 +239,7 @@ def get_cached_recommendations(user, top_n=20):
         cached = cache.get(key)
         if cached:
             return cached["results"]
-    except:
+    except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Redis cache unavailable for recommendations: {e}")

@@ -326,12 +326,12 @@ class ScholarshipBatchSpider(scrapy.Spider):
 
         # ── build extractor (Scrapy response mode) ────────────────────────────
         extractor = ScholarshipExtractor(scrapy_response=response)
-
+        original_url = response.meta.get("original_url", response.url)
         item = {
             "title":       extractor.extract_title(cfg.title_selector),
             "description": extractor.extract_description(cfg.description_selector),
             "reward":      extractor.extract_reward(cfg.reward_selector),
-            "link":        response.url,
+            "link":        original_url,
             "end_date":    extractor.extract_date("end",   cfg.deadline_selector),
             "start_date":  extractor.extract_date("start", cfg.start_date_selector),
             "requirements": extractor.extract_requirements(
@@ -396,7 +396,7 @@ class ScholarshipBatchSpider(scrapy.Spider):
 
         # ── defaults / guard rails ────────────────────────────────────────────
         item.setdefault("title",       f"Unknown Scholarship - {response.url}")
-        item.setdefault("link",        response.url)
+        item.setdefault("link",        original_url)
         item.setdefault("description", "Description unavailable.")
         item.setdefault("scraped_at",  datetime.now().isoformat())
 
