@@ -405,7 +405,24 @@ class ScholarshipBatchSpider(scrapy.Spider):
         except ValidationError as e:
             self.logger.warning(f"Dropping '{item.get('title')}': {e}")
 
-
+    def _is_scraperapi_quota_error(self, response) -> bool:
+        """
+        ScraperAPI returns specific signals when quota is exhausted.
+        - HTTP 403 or 429 from api.scraperapi.com itself
+        - Response body containing their quota error message
+        """
+        if response.status in (403, 429):
+            # Check if this is ScraperAPI's own error, not the target site's
+            body = response.text.lower()
+            if any(phrase in body for phrase in [
+                "you have exceeded",
+                "monthly limit",
+                "quota exceeded",
+                "api credits",
+                "out of credits",
+            ]):
+                return True
+        return False
 # ─────────────────────────────────────────────────────────────────────────────
 # Shared helper
 # ─────────────────────────────────────────────────────────────────────────────
