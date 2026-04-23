@@ -12,6 +12,10 @@ from scholarships.utils import generate_fingerprint
 from scholarships.utils import ScholarshipExtractor
 from scrapy_playwright.page import PageMethod
 import json
+from playwright_stealth import stealth_async
+import os
+
+SCRAPERAPI_KEY = os.environ.get("SCRAPERAPI_KEY", "")
 
 def should_abort_request(request):
     """
@@ -32,6 +36,17 @@ def should_abort_request(request):
         return True
         
     return False
+
+def build_scraperapi_url(target_url: str) -> str:
+    """Wrap a target URL for ScraperAPI with JS rendering enabled."""
+    return (
+        f"http://api.scraperapi.com/"
+        f"?api_key={SCRAPERAPI_KEY}"
+        f"&url={target_url}"
+        f"&render=true"          # JavaScript rendering
+        f"&country_code=us"      
+        f"&keep_headers=false"
+    )
 
 class ScholarshipBatchSpider(scrapy.Spider):
     name = "scholarship_batch"
@@ -61,6 +76,7 @@ class ScholarshipBatchSpider(scrapy.Spider):
         "COOKIES_ENABLED": True,
         "HTTPERROR_ALLOWED_CODES": [403, 404, 500],
         "USER_AGENT": None,
+        "DOWNLOAD_TIMEOUT": 90,
     }
 
     # ── init ──────────────────────────────────────────────────────────────────
@@ -86,6 +102,9 @@ class ScholarshipBatchSpider(scrapy.Spider):
         clean_domain = parsed_base.netloc.replace("www.", "")
         self.allowed_domains = [clean_domain, f"www.{clean_domain}"]
         
+        self.using_scraperapi = bool(SCRAPERAPI_KEY)
+        self.scraperapi_failed = False  # flips to True on quota exhaustion
+
         for url in self.start_urls:
             list_domain = urlparse(url).netloc.replace("www.", "")
             if list_domain not in self.allowed_domains:
@@ -98,7 +117,50 @@ class ScholarshipBatchSpider(scrapy.Spider):
         )
         self.llm_engine = LLMEngine()
 
-    # ── list page ─────────────────────────────────────────────────────────────
+    def _make_scraperapi_request(self, url, callback, **meta_extras):
+        """
+        Build a plain HTTP request through ScraperAPI.
+        No Playwright involved — ScraperAPI handles the browser on their end.
+        """
+        api_url = build_scraperapi_url(url)
+        return scrapy.Request(
+            url=api_url,
+            callback=callback,
+            meta={
+                "original_url": url,   # preserve for pagination and item links
+                "via_scraperapi": True,
+                **meta_extras,
+            },
+            dont_filter=True,  # ScraperAPI URL differs from original, bypass dupe filter
+        )
+    
+    def _make_playwright_request(self, url, callback, **meta_extras):
+        """
+        Fall back to Scrapy-Playwright for direct browser rendering.
+        Used when ScraperAPI key is absent or quota is exhausted.
+        """
+        return scrapy.Request(
+            url,
+            meta={
+                "playwright": True,
+                "playwright_page_goto_kwargs": {
+                    "wait_until": "networkidle",
+                    "timeout": 60_000,
+                },
+                "playwright_page_methods": [
+                    PageMethod(
+                        "wait_for_selector",
+                        self.site_config.list_item_selector,
+                        timeout=15_000,
+                    ),
+                ],
+                **meta_extras,
+            },
+            callback=callback,
+        )
+    
+    async def init_page(self, page, request):
+        await stealth_async(page)
 
     def start_requests(self):
         self.logger.error("🔥 start_requests CALLED 🔥")
@@ -107,6 +169,7 @@ class ScholarshipBatchSpider(scrapy.Spider):
                 url,
                 meta={
                     "playwright": True,
+                    "playwright_page_init_callback": self.init_page,
                     "playwright_page_goto_kwargs": {"wait_until": "networkidle", "timeout": 60_000},
                     "playwright_page_methods": [
                     PageMethod("wait_for_selector", "p.td-module-title a",state="attached", timeout=10000),
@@ -124,38 +187,189 @@ class ScholarshipBatchSpider(scrapy.Spider):
                 self.logger.warning(f"Timeout waiting for selector on {failure.request.url}. Closing page.")
                 await page.close()
 
+    # async def parse_list(self, response):
+    #     if response.meta.get("via_scraperapi"):
+    #         if self._is_scraperapi_quota_error(response):
+    #             self.logger.warning(
+    #                 "ScraperAPI quota exhausted. Switching to Playwright fallback."
+    #             )
+    #             self.scraperapi_failed = True
+    #             # Re-request the same URL via Playwright
+    #             original_url = response.meta.get("original_url", response.url)
+    #             yield self._make_playwright_request(original_url, callback=self.parse_list)
+    #             return
+            
+    #     if response.status == 403:
+    #         self.logger.warning(f"Blocked (403) — skipping: {response.url}")
+    #         return
+    #     if response.status == 202:
+    #         self.logger.warning(f"Got 202 (still processing) — page may not be fully rendered: {response.url}")
+
+    #     cfg = self.site_config
+    #     current_page = response.meta.get("page_number", 1)
+    #     MAX_PAGES = 2
+
+    #     base_url = response.meta.get("original_url", response.url)
+
+    #     link_sel_raw  = cfg.link_selector.replace("::attr(href)", "").strip()
+    #     title_sel_raw = cfg.title_selector.replace("::text", "").strip()
+
+    #     cards_found = len(response.css(cfg.list_item_selector))
+    #     self.logger.info(f"Cards found on {base_url}: {cards_found}")
+
+    #     if cards_found == 0:
+    #         self.logger.warning(
+    #             f"No cards matched selector '{cfg.list_item_selector}' on {base_url}. "
+    #             f"Page may still be bot-blocked."
+    #         )
+    #         return
+        
+    #     for card in response.css(cfg.list_item_selector):
+    #         if self.scraped_count >= self.max_items:
+    #             self.logger.info(f"Reached max ({self.max_items}) for {cfg.name}")
+    #             break
+    #         if self.consecutive_duplicates >= 3:
+    #             self.logger.info("⚠ Stopping: 3 consecutive duplicates")
+    #             break
+
+    #         # Extract href
+    #         relative_link = (
+    #             card.css(link_sel_raw).attrib.get("href")
+    #             or card.css(link_sel_raw).xpath("@href").get()
+    #         )
+    #         if not relative_link:
+    #             self.logger.warning(f"No link with selector: {link_sel_raw}")
+    #             continue
+
+    #         # Extract title
+    #         title = (
+    #             card.css(f"{title_sel_raw}::text").get()
+    #             or card.css(title_sel_raw).xpath("string(.)").get()
+    #         )
+    #         if not title:
+    #             continue
+
+    #         from urllib.parse import urljoin
+    #         url = urljoin(base_url, relative_link)
+    #         fingerprint = generate_fingerprint(title, url)
+
+    #         if fingerprint in self.existing_fingerprints:
+    #             self.consecutive_duplicates += 1
+    #             self.logger.info(f"⚠ Duplicate #{self.consecutive_duplicates}/3: {title}")
+    #             continue
+
+    #         self.consecutive_duplicates = 0
+    #         self.existing_fingerprints.add(fingerprint)
+    #         self.scraped_count += 1
+
+    #         if self.using_scraperapi and not self.scraperapi_failed:
+    #             yield self._make_scraperapi_request(
+    #                 url,
+    #                 callback=self.parse_detail,
+    #                 fingerprint=fingerprint,
+    #                 title=title,
+    #             )
+    #         else:
+    #             yield self._make_playwright_request(
+    #                 url,
+    #                 callback=self.parse_detail,
+    #                 fingerprint=fingerprint,
+    #                 title=title,
+    #             )
+
+    #     # Pagination
+    #     if current_page < MAX_PAGES and self.consecutive_duplicates < 3:
+    #         next_page = (
+    #             response.css("a.next::attr(href)").get()
+    #             or response.css("a.next.page-numbers::attr(href)").get()
+    #             or response.css('a[rel="next"]::attr(href)').get()
+    #             or response.css(".pagination a.active + a::attr(href)").get()
+    #         )
+    #         if next_page:
+    #             from urllib.parse import urljoin
+    #             next_url = urljoin(base_url, next_page)
+    #             if self.using_scraperapi and not self.scraperapi_failed:
+    #                 yield self._make_scraperapi_request(
+    #                     next_url,
+    #                     callback=self.parse_list,
+    #                     page_number=current_page + 1,
+    #                 )
+    #             else:
+    #                 yield self._make_playwright_request(
+    #                     next_url,
+    #                     callback=self.parse_list,
+    #                     page_number=current_page + 1,
+    #                 )
+
+    def start_requests(self):
+        self.logger.info("start_requests called")
+        for url in self.start_urls:
+            if self.using_scraperapi and not self.scraperapi_failed:
+                self.logger.info(f"Routing via ScraperAPI: {url}")
+                yield self._make_scraperapi_request(url, callback=self.parse_list)
+            else:
+                self.logger.info(f"Routing via Playwright: {url}")
+                yield self._make_playwright_request(url, callback=self.parse_list)
+
+    # ── List page parser ───────────────────────────────────────────────────────
+
     async def parse_list(self, response):
+        # ── ScraperAPI quota exhaustion detection ─────────────────────────────
+        # ScraperAPI returns specific status codes and body text on quota failure
+        if response.meta.get("via_scraperapi"):
+            if self._is_scraperapi_quota_error(response):
+                self.logger.warning(
+                    "ScraperAPI quota exhausted. Switching to Playwright fallback."
+                )
+                self.scraperapi_failed = True
+                # Re-request the same URL via Playwright
+                original_url = response.meta.get("original_url", response.url)
+                yield self._make_playwright_request(original_url, callback=self.parse_list)
+                return
+
         if response.status == 403:
             self.logger.warning(f"Blocked (403) — skipping: {response.url}")
             return
         if response.status == 202:
-            self.logger.warning(f"Got 202 (still processing) — page may not be fully rendered: {response.url}")
+            self.logger.warning(f"Got 202 — page still processing: {response.url}")
 
         cfg = self.site_config
         current_page = response.meta.get("page_number", 1)
         MAX_PAGES = 2
 
+        # When via ScraperAPI, response.url is the api.scraperapi.com URL
+        # We need the original URL for resolving relative links
+        base_url = response.meta.get("original_url", response.url)
+
         link_sel_raw  = cfg.link_selector.replace("::attr(href)", "").strip()
         title_sel_raw = cfg.title_selector.replace("::text", "").strip()
+
+        cards_found = len(response.css(cfg.list_item_selector))
+        self.logger.info(f"Cards found on {base_url}: {cards_found}")
+
+        if cards_found == 0:
+            self.logger.warning(
+                f"No cards matched selector '{cfg.list_item_selector}' on {base_url}. "
+                f"Page may still be bot-blocked."
+            )
+            return
 
         for card in response.css(cfg.list_item_selector):
             if self.scraped_count >= self.max_items:
                 self.logger.info(f"Reached max ({self.max_items}) for {cfg.name}")
                 break
             if self.consecutive_duplicates >= 3:
-                self.logger.info("⚠ Stopping: 3 consecutive duplicates")
+                self.logger.info("Stopping: 3 consecutive duplicates")
                 break
 
-            # Extract href
             relative_link = (
                 card.css(link_sel_raw).attrib.get("href")
                 or card.css(link_sel_raw).xpath("@href").get()
             )
             if not relative_link:
-                self.logger.warning(f"No link with selector: {link_sel_raw}")
+                self.logger.warning(f"No link found with selector: {link_sel_raw}")
                 continue
 
-            # Extract title
             title = (
                 card.css(f"{title_sel_raw}::text").get()
                 or card.css(title_sel_raw).xpath("string(.)").get()
@@ -163,30 +377,39 @@ class ScholarshipBatchSpider(scrapy.Spider):
             if not title:
                 continue
 
-            url = response.urljoin(relative_link)
+            # Resolve relative URL against the original page URL, not ScraperAPI URL
+            from urllib.parse import urljoin
+            url = urljoin(base_url, relative_link)
             fingerprint = generate_fingerprint(title, url)
 
             if fingerprint in self.existing_fingerprints:
                 self.consecutive_duplicates += 1
-                self.logger.info(f"⚠ Duplicate #{self.consecutive_duplicates}/3: {title}")
+                self.logger.info(
+                    f"Duplicate #{self.consecutive_duplicates}/3: {title}"
+                )
                 continue
 
             self.consecutive_duplicates = 0
             self.existing_fingerprints.add(fingerprint)
             self.scraped_count += 1
 
-            yield scrapy.Request(
-                url,
-                meta={
-                    "playwright": True,
-                    "fingerprint": fingerprint,
-                    "title": title,
-                    "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded", "timeout": 60_000},
-                },
-                callback=self.parse_detail,
-            )
+            # Route detail page requests through same mechanism
+            if self.using_scraperapi and not self.scraperapi_failed:
+                yield self._make_scraperapi_request(
+                    url,
+                    callback=self.parse_detail,
+                    fingerprint=fingerprint,
+                    title=title,
+                )
+            else:
+                yield self._make_playwright_request(
+                    url,
+                    callback=self.parse_detail,
+                    fingerprint=fingerprint,
+                    title=title,
+                )
 
-        # Pagination
+        # ── Pagination ─────────────────────────────────────────────────────────
         if current_page < MAX_PAGES and self.consecutive_duplicates < 3:
             next_page = (
                 response.css("a.next::attr(href)").get()
@@ -195,16 +418,20 @@ class ScholarshipBatchSpider(scrapy.Spider):
                 or response.css(".pagination a.active + a::attr(href)").get()
             )
             if next_page:
-                yield scrapy.Request(
-                    response.urljoin(next_page),
-                    callback=self.parse_list,
-                    meta={
-                        "playwright": True,
-                        "playwright_page_goto_kwargs": {"wait_until": "networkidle", "timeout": 90_000},
-                        "page_number": current_page + 1,
-                    },
-                )
-
+                from urllib.parse import urljoin
+                next_url = urljoin(base_url, next_page)
+                if self.using_scraperapi and not self.scraperapi_failed:
+                    yield self._make_scraperapi_request(
+                        next_url,
+                        callback=self.parse_list,
+                        page_number=current_page + 1,
+                    )
+                else:
+                    yield self._make_playwright_request(
+                        next_url,
+                        callback=self.parse_list,
+                        page_number=current_page + 1,
+                    )
     # ── detail page ───────────────────────────────────────────────────────────
 
     async def parse_detail(self, response):
@@ -243,29 +470,41 @@ class ScholarshipBatchSpider(scrapy.Spider):
 
         if QualityCheck.should_full_regenerate(quality_report):
             self.logger.info(f"Full LLM extraction. Score: {quality_report['quality_score']}")
-            recovered = await self.llm_engine.extract_data(response.text, response.url)
+            recovered = await self.llm_engine.extract_data(response.text, item["link"])
+            
             if isinstance(recovered, list):
                 recovered = recovered[0] if recovered else {}
+            if isinstance(recovered, str):
+                try:
+                    import json
+                    recovered = json.loads(recovered)
+                except json.JSONDecodeError:
+                    self.logger.error("Failed to parse LLM response as JSON")
+                    recovered = {}
+                    
             _parse_dates_inplace(recovered)
             item.update(recovered)
 
         elif quality_report["needs_llm"]:
             fields = list(set(
                 quality_report["failed_fields"]
-               + [f for f, _, _ in quality_report["low_confidence_fields"]]
+                + [f for f, _, _ in quality_report["low_confidence_fields"]]
             ))
             if fields:
                 self.logger.info(f"Partial LLM fix for: {fields}")
                 recovered = await self.llm_engine.recover_specific_fields(
                     extractor.clean_text, fields
                 )
-                _parse_dates_inplace(recovered)
+                
                 if isinstance(recovered, str):
                     try:
+                        import json
                         recovered = json.loads(recovered)
                     except json.JSONDecodeError:
-                        self.logger.error("Failed to parse LLM response as JSON")
+                        self.logger.error("Failed to parse partial LLM response as JSON")
                         recovered = {}
+                        
+                _parse_dates_inplace(recovered)
                 item.update(recovered)
 
         # ── defaults / guard rails ────────────────────────────────────────────
